@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>회원가입</title>
+    <style>
+        body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .reg-box { border: 1px solid #ccc; padding: 30px; border-radius: 8px; width: 300px; text-align: center; }
+        input { width: 100%; padding: 10px; margin-bottom: 12px; box-sizing: border-box; }
+        button { width: 100%; padding: 10px; background-color: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <div class="reg-box">
+        <h2>회원가입</h2>
+        <input type="text" id="name" placeholder="이름">
+        <input type="email" id="email" placeholder="이메일">
+        <input type="password" id="password" placeholder="비밀번호">
+        <button onclick="register()">가입완료</button>
+    </div>
+
+    <script src="/assets/js/common.js"></script>
+    <script>
+        async function register() {
+            const name = document.getElementById('name').value;
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+
+            const response = await jwtFetch('/users', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, email, password, roles: ['CUSTOMER'] })
+            });
+
+            const data = await response.json();
+
+            if (data.result === 'success') {
+                alert('회원가입 성공! 로그인 화면으로 이동합니다.');
+                window.location.href = '/login.html';
+            } else {
+                alert('회원가입에 실패했습니다.');
+            }
+        }
+    </script>
+</body>
+</html>

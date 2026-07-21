@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>메인 게시판</title>
+    <style>
+        body { font-family: sans-serif; padding: 40px; }
+        .card { border: 1px solid #ddd; padding: 20px; border-radius: 8px; margin-bottom: 20px; width: 400px; }
+        button { padding: 8px 16px; margin-right: 10px; cursor: pointer; }
+        .logout-btn { background-color: #dc3545; color: white; border: none; border-radius: 4px; }
+    </style>
+</head>
+<body>
+
+    <h2>📌 메인 게시판 / 권한 테스트</h2>
+    
+    <div class="card">
+        <h3>API 권한 호출 테스트</h3>
+        <button onclick="testApi('/customer/hello')">Customer API</button>
+        <button onclick="testApi('/admin/hello')">Admin API</button>
+        <p id="apiResult">결과가 여기에 출력됩니다.</p>
+    </div>
+
+    <!-- common.js의 jwtLogout() 호출 -->
+    <button class="logout-btn" onclick="jwtLogout()">로그아웃</button>
+
+    <script src="/assets/js/common.js"></script>
+    <script>
+        async function testApi(url) {
+            // jwtFetch 함수로 토큰 자동 포함 요청
+            const response = await jwtFetch(url);
+
+            if (response.status === 401) {
+                alert('로그인이 필요한 서비스입니다.');
+                window.location.href = '/login.html';
+                return;
+            }
+
+            if (response.status === 403) {
+                document.getElementById('apiResult').innerText = '❌ 접근 권한이 없습니다 (403 Forbidden)';
+                return;
+            }
+
+            const text = await response.text();
+            document.getElementById('apiResult').innerText = `⭕ 서버 응답: ${text}`;
+        }
+    </script>
+</body>
+</html>
