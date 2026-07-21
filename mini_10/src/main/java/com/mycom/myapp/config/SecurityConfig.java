@@ -2,6 +2,7 @@ package com.mycom.myapp.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -36,7 +37,7 @@ public class SecurityConfig {
 	SecurityFilterChain filterChain(
 			HttpSecurity http, 
 			MyAuthenticationEntryPoint entryPoint,
-			MyAccessDeniedHandler accessDeniedHandler // 👈 1. 여기에 403 핸들러 파라미터 추가!
+			MyAccessDeniedHandler accessDeniedHandler
 	) throws Exception {
 		return http
 				.httpBasic(httpBasic -> httpBasic.disable())
@@ -57,6 +58,17 @@ public class SecurityConfig {
 											"/users/**",
 											"/auth/**"
 										).permitAll()
+										
+										// 태연님: 트레이너 전용 일정 API (TRAINER 권한)
+										.requestMatchers(
+											"/api/trainer/schedules/**",
+											"/api/trainer/schedule-templates/**"
+										).hasRole("TRAINER")
+										
+										// 태연님: 회원용 일정 GET 요청 (CUSTOMER, TRAINER, ADMIN 권한)
+										.requestMatchers(HttpMethod.GET, "/api/schedules/**")
+										.hasAnyRole("CUSTOMER", "TRAINER", "ADMIN")
+										
 										.requestMatchers("/customer/**").hasAnyRole("CUSTOMER", "ADMIN")
 										.requestMatchers("/admin/**").hasRole("ADMIN")
 										.anyRequest().authenticated()
