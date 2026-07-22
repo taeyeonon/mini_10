@@ -98,6 +98,7 @@
 
     async function createTemplate() {
         const message = document.getElementById('templateMessage');
+        const startDate = document.getElementById('effectiveFrom').value;
         const endDate = document.getElementById('effectiveTo').value;
         try {
             const data = await request('/api/trainer/schedule-templates', {
@@ -107,12 +108,36 @@
                     startTime: document.getElementById('templateStart').value,
                     endTime: document.getElementById('templateEnd').value,
                     capacity: Number(document.getElementById('templateCapacity').value),
-                    effectiveFrom: document.getElementById('effectiveFrom').value,
+                    effectiveFrom: startDate,
                     effectiveTo: endDate || null
                 })
             });
-            message.textContent = `반복 일정 등록 성공 (ID: ${data.id})`;
+
+            const today = localDate(new Date());
+            const generationStart = startDate > today ? startDate : today;
+            const generationEnd = endDate || addDays(generationStart, 30);
+            const generated = await request('/api/trainer/schedule-templates/generate', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({startDate: generationStart, endDate: generationEnd})
+            });
+
+            message.textContent = `반복 일정 등록 성공 (ID: ${data.id})\n` +
+                `실제 수업 ${generated.createdCount}개 생성, ${generated.skippedCount}개 건너뜀`;
+            await loadSchedules();
         } catch (e) { message.textContent = e.message; }
+    }
+
+    function localDate(date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+
+    function addDays(value, days) {
+        const date = new Date(`${value}T00:00:00`);
+        date.setDate(date.getDate() + days);
+        return localDate(date);
     }
 
     async function loadSchedules() {
@@ -141,6 +166,10 @@
 
     document.addEventListener('DOMContentLoaded', () => {
         if (!getJwtToken()) location.href = '/login.html';
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        document.getElementById('effectiveFrom').value = localDate(tomorrow);
+        document.getElementById('effectiveTo').value = addDays(localDate(tomorrow), 30);
         loadSchedules();
     });
 </script>
