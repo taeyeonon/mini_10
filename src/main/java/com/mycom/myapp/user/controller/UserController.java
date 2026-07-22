@@ -28,11 +28,4 @@ public class UserController {
 	public UserResultDto insertUser(@RequestBody UserDto userDto) {
 		return userService.insertUser(userDto);
 	}
-
-	// GET /customer/{id}/reservations - 내 예약 내역 조회
-	@GetMapping("/reservations/my")
-	public List<ReservationDto> getMyReservations(@PathVariable Long id) {
-		return userService.getMyReservations(id);
-	}
-
 }

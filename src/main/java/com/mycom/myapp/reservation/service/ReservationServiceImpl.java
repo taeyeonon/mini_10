@@ -14,6 +14,7 @@ import com.mycom.myapp.reservation.exception.DuplicateReservationException;
 import com.mycom.myapp.reservation.exception.ScheduleFullException;
 import com.mycom.myapp.reservation.exception.ScheduleNotAvailableException;
 import com.mycom.myapp.reservation.exception.TicketShortageException;
+import com.mycom.myapp.reservation.repository.ReservationRepository;
 import com.mycom.myapp.schedule.entity.ScheduleStatus;
 import com.mycom.myapp.schedule.entity.TrainerSchedule;
 import com.mycom.myapp.schedule.repository.TrainerScheduleRepository;
@@ -29,7 +30,7 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class ReservationServiceImpl implements ReservationService{
 
-	private final ReservationService reservationService;
+	private final ReservationRepository reservationRepository;
 	private final TrainerScheduleRepository trainerScheduleRepository;
 	private final TicketRepository ticketRepository;
 	private final UserRepository userRepository;
@@ -116,16 +117,16 @@ public class ReservationServiceImpl implements ReservationService{
 
 		reservation.setStatus(ReservationStatus.CANCELLED);
 
-		log.info("예약 취소 : memberId={}, reservationId={}, 남은예약수={}", 
-				memberId, reservationId, schedule.getReservationCount());
-
 		return toDto(reservation);
 	}
 
 	@Override
 	@Transactional(readOnly=true)
 	public List<ReservationDto> getMyReservations(Long customerId) {
-		return reservationService.getMyReservations(customerId);
+		return reservationRepository.findByCustomerIdIdOrderByReservedAtDesc(customerId)
+				.stream()
+				.map(this::toDto)
+				.toList();
 	}
 
 	private ReservationDto toDto(Reservation reservation) {

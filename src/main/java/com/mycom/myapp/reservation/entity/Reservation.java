@@ -20,7 +20,6 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import sun.security.krb5.internal.Ticket;
 
 @Entity
 @Builder
@@ -33,9 +32,9 @@ public class Reservation {
 	@GeneratedValue(strategy=GenerationType.IDENTITY)
 	private Long id;
 	
-	@ManyToMany(fetch=FetchType.LAZY)
+	@ManyToOne(fetch=FetchType.LAZY)
 	@JoinColumn(name="customer_id")
-	private User member;
+	private User customerId;
 	
 	@ManyToOne(fetch=FetchType.LAZY)
 	@JoinColumn(name="trainer_schedule_id")
