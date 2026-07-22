@@ -32,11 +32,12 @@ public class CustomerTicketController {
 		return ResponseEntity.ok(tickets);
 	}
 	
-	// 수강권 차감/사용
-	@PostMapping("/use")
-	public ResponseEntity<String> useTicket(@AuthenticationPrincipal MyUserDetails userDetails){
-		Long loginUserId = userDetails.getId();
-		ticketService.useTicket(loginUserId);
-		return ResponseEntity.ok("수강권 1회 차감 성공");
-	}
+	
+//	// 수업 예약과 별도로 수강권을 직접 차감하는 API -> 주석처리
+//	@PostMapping("/use")
+//	public ResponseEntity<String> useTicket(@AuthenticationPrincipal MyUserDetails userDetails){
+//		Long loginUserId = userDetails.getId();
+//		ticketService.useTicket(loginUserId);
+//		return ResponseEntity.ok("수강권 1회 차감 성공");
+//	}
 }

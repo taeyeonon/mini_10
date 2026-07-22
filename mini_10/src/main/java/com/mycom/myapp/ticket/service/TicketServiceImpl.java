@@ -56,7 +56,7 @@ public class TicketServiceImpl implements TicketService{
 	
 	// 수강권 차감
 	@Transactional
-	public void useTicket(Long userId) {
+	public Ticket useTicketAndGet(Long userId) {
 		LocalDate today = LocalDate.now();
 		
 		Ticket ticket = ticketRepository.findFirstByUserIdAndRemainingCountGreaterThanAndStartDateLessThanEqualAndEndDateGreaterThanEqualOrderByIdAsc(
@@ -64,5 +64,22 @@ public class TicketServiceImpl implements TicketService{
 		).orElseThrow(() -> new IllegalStateException("사용 가능한 수강권이 없습니다."));
 		
 		ticket.use();
+		return ticket;
+	}
+
+//	@Transactional
+//	public void useTicket(Long userId) {
+//		useTicketAndGet(userId);
+//	}
+	
+	@Transactional
+	public void cancelTicket(Ticket ticket) {
+	    if (ticket == null) {
+	        throw new IllegalArgumentException("복구할 수강권 정보가 없습니다.");
+	    }
+	    // Ticket 엔티티의 cancel() (복구) 메서드 호출
+	    ticket.cancel();
+	    
+	    log.debug("Ticket restored. ID: {}, remainingCount: {}", ticket.getId(), ticket.getRemainingCount());
 	}
 }
