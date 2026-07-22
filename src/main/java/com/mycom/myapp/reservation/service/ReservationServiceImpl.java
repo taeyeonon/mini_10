@@ -55,7 +55,7 @@ public class ReservationServiceImpl implements ReservationService{
 
 		// 4단계 : 중복 예약 확인
 		//         같은 회원이 같은 스케줄을 이미 CONFIRMED 상태로 예약했는지
-		reservationRepository.findByMemberIdAndTrainerScheduleId(customerId, trainerScheduleId)
+		reservationRepository.findByCustomerIdAndTrainerScheduleId(customerId, trainerScheduleId)
 					.ifPresent(existing -> {
 						if(existing.getStatus() == ReservationStatus.CONFIRMED) {
 							throw new DuplicateReservationException();
@@ -75,10 +75,10 @@ public class ReservationServiceImpl implements ReservationService{
 		ticket.setRemainingCount(ticket.getRemainingCount() - 1);
 		schedule.setReservationCount(schedule.getReservationCount() + 1);
 
-		User member = userRepository.getReferenceById(customerId);
+		User customer = userRepository.getReferenceById(customerId);
 
 		Reservation reservation = Reservation.builder()
-					.member(member)
+					.customer(customerId)
 					.trainerSchedule(schedule)
 					.ticket(ticket)
 					.reservedAt(LocalDateTime.now())
@@ -100,7 +100,7 @@ public class ReservationServiceImpl implements ReservationService{
 					.orElseThrow(() -> new IllegalArgumentException("존재하지 않는 예약입니다"));
 
 		// 본인 예약만 취소 가능
-		if( !reservation.getMember().getId().equals(customerId) ) {
+		if( !reservation.getCustomer().getId().equals(customerId) ) {
 			throw new IllegalArgumentException("본인의 예약만 취소할 수 있습니다");
 		}
 		if( reservation.getStatus() != ReservationStatus.CONFIRMED ) {

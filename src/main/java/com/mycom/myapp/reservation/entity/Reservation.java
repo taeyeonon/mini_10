@@ -34,7 +34,7 @@ public class Reservation {
 	
 	@ManyToOne(fetch=FetchType.LAZY)
 	@JoinColumn(name="customer_id")
-	private User customerId;
+	private User customer;
 	
 	@ManyToOne(fetch=FetchType.LAZY)
 	@JoinColumn(name="trainer_schedule_id")
