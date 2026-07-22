@@ -56,7 +56,10 @@ public class SecurityConfig {
 											"/register",
 											"/register.html",
 											"/users/**",
-											"/auth/**"
+											"/auth/**",
+											"/admin.html",
+											"/customer.html",
+											"/trainer.html"
 										).permitAll()
 										
 										// 태연님: 트레이너 전용 일정 API (TRAINER 권한)

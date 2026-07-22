@@ -2,47 +2,77 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>메인 게시판</title>
+    <title>메인 게시판 - 통합 대시보드</title>
     <style>
         body { font-family: sans-serif; padding: 40px; }
-        .card { border: 1px solid #ddd; padding: 20px; border-radius: 8px; margin-bottom: 20px; width: 400px; }
-        button { padding: 8px 16px; margin-right: 10px; cursor: pointer; }
-        .logout-btn { background-color: #dc3545; color: white; border: none; border-radius: 4px; }
+        .header-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; width: 500px; }
+        .logout-btn { background-color: #dc3545; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; }
+        .card { border: 1px solid #ddd; padding: 24px; border-radius: 8px; width: 450px; background-color: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .nav-group { display: flex; flex-direction: column; gap: 12px; margin-top: 20px; }
+        .nav-btn { width: 100%; padding: 14px; font-size: 15px; font-weight: bold; text-align: left; border: 1px solid #ccc; border-radius: 6px; cursor: pointer; background-color: #f8f9fa; transition: all 0.2s; }
+        .nav-btn:hover { background-color: #e9ecef; }
+        .btn-customer { border-left: 5px solid #198754; }
+        .btn-trainer { border-left: 5px solid #ffc107; }
+        .btn-admin { border-left: 5px solid #0d6efd; }
     </style>
 </head>
 <body>
 
-    <h2>📌 메인 게시판 / 권한 테스트</h2>
-    
-    <div class="card">
-        <h3>API 권한 호출 테스트</h3>
-        <button onclick="testApi('/customer/hello')">Customer API</button>
-        <button onclick="testApi('/admin/hello')">Admin API</button>
-        <p id="apiResult">결과가 여기에 출력됩니다.</p>
+    <div class="header-bar">
+        <h2>📌 메인 게시판</h2>
+        <button class="logout-btn" onclick="jwtLogout()">로그아웃</button>
     </div>
 
-    <!-- common.js의 jwtLogout() 호출 -->
-    <button class="logout-btn" onclick="jwtLogout()">로그아웃</button>
+    <div class="card">
+        <h3>🚀 이동할 페이지를 선택하세요</h3>
+        <p style="font-size: 13px; color: #6c757d;">보유하신 권한에 맞는 전용 페이지로 이동합니다.</p>
+        
+        <div class="nav-group">
+            <button id="customerPageBtn" class="nav-btn btn-customer" onclick="navigatePage('/customer.html')">
+                🙋‍♂️ 사용자(회원) 페이지
+            </button>
+            <button id="trainerPageBtn" class="nav-btn btn-trainer" onclick="navigatePage('/trainer.html')">
+                🏋️ 트레이너 페이지
+            </button>
+            <button id="adminPageBtn" class="nav-btn btn-admin" onclick="navigatePage('/admin.html')">
+                ⚙️ 관리자 페이지
+            </button>
+        </div>
+    </div>
 
     <script src="/assets/js/common.js"></script>
     <script>
-        async function testApi(url) {
-            // jwtFetch 함수로 토큰 자동 포함 요청
-            const response = await jwtFetch(url);
+        let userRoles = [];
 
-            if (response.status === 401) {
-                alert('로그인이 필요한 서비스입니다.');
-                window.location.href = '/login.html';
+        document.addEventListener("DOMContentLoaded", () => {
+            const token = getJwtToken();
+            if (!token) {
+                alert("로그인이 필요합니다.");
+                window.location.href = "/login.html";
                 return;
             }
 
-            if (response.status === 403) {
-                document.getElementById('apiResult').innerText = '❌ 접근 권한이 없습니다 (403 Forbidden)';
+            try {
+                const payload = JSON.parse(atob(token.split('.')[1]));
+                userRoles = payload.roles || payload.auth || [];
+            } catch (e) {
+                console.error("토큰 파싱 실패:", e);
+            }
+        });
+
+        // 페이지 이동 제어 함수
+        function navigatePage(url) {
+            // 필요에 따라 프론트엔드 차원에서 1차 권한 체크
+            if (url === '/admin.html' && !(userRoles.includes("ROLE_ADMIN") || userRoles.includes("ADMIN"))) {
+                alert("❌ 관리자 권한이 없습니다.");
                 return;
             }
-
-            const text = await response.text();
-            document.getElementById('apiResult').innerText = `⭕ 서버 응답: ${text}`;
+            if (url === '/trainer.html' && !(userRoles.includes("ROLE_TRAINER") || userRoles.includes("TRAINER") || userRoles.includes("ROLE_ADMIN") || userRoles.includes("ADMIN"))) {
+                alert("❌ 트레이너 권한이 없습니다.");
+                return;
+            }
+            
+            window.location.href = url;
         }
     </script>
 </body>

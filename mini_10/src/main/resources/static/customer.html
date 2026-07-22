@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>사용자 페이지 - 내 수강권</title>
+    <style>
+        body { font-family: sans-serif; padding: 40px; }
+        .card { border: 1px solid #ddd; padding: 20px; border-radius: 8px; margin-bottom: 20px; width: 450px; background-color: #fff; }
+        .header-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; width: 490px; }
+        button { padding: 8px 16px; cursor: pointer; border-radius: 4px; border: 1px solid #ccc; }
+        .back-btn { background-color: #6c757d; color: white; border: none; }
+        .logout-btn { background-color: #dc3545; color: white; border: none; }
+        .primary-btn { background-color: #198754; color: white; border: none; padding: 8px 16px; }
+        .warning-btn { background-color: #ffc107; color: #212529; border: none; padding: 8px 16px; font-weight: bold; }
+        .ticket-box { background-color: #f8f9fa; border: 1px solid #e9ecef; padding: 12px; border-radius: 6px; margin-top: 10px; }
+        .ticket-item { border-bottom: 1px dashed #ccc; padding-bottom: 8px; margin-bottom: 8px; }
+        .ticket-item:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+    </style>
+</head>
+<body>
+
+    <div class="header-bar">
+        <h2>🙋‍♂️ 사용자 전용 페이지</h2>
+        <div>
+            <button class="back-btn" onclick="location.href='/board.html'">🔙 메인으로</button>
+            <button class="logout-btn" onclick="jwtLogout()">로그아웃</button>
+        </div>
+    </div>
+
+    <!-- CUSTOMER 수강권 조회 카드 -->
+    <div class="card">
+        <h3>🎟️ 내 수강권 조회</h3>
+        <p style="font-size: 13px; color: #6c757d;">로그인한 회원의 수강권 잔여 횟수 및 정보 조회</p>
+        
+        <button class="primary-btn" onclick="getMyTickets()">내 수강권 불러오기</button>
+        
+        <div id="ticketContainer" class="ticket-box" style="display: none;">
+            <div id="ticketList"></div>
+        </div>
+        <p id="ticketError" style="color: #dc3545;"></p>
+    </div>
+
+    <!-- CUSTOMER 수강권 차감/사용 카드 -->
+    <div class="card">
+        <h3>🎟️ 수강권 사용 테스트</h3>
+        <p style="font-size: 13px; color: #6c757d;">수강권을 1회 차감합니다. (POST /customer/tickets/use)</p>
+        
+        <button class="warning-btn" onclick="useTicket()">수강권 1회 차감하기</button>
+        <p id="useTicketResult" style="margin-top: 10px; font-weight: bold;"></p>
+    </div>
+
+    <script src="/assets/js/common.js"></script>
+    <script>
+        // 내 수강권 조회 함수
+        async function getMyTickets() {
+            const errorElement = document.getElementById('ticketError');
+            const containerElement = document.getElementById('ticketContainer');
+            const listElement = document.getElementById('ticketList');
+
+            errorElement.innerText = '';
+            
+            const response = await jwtFetch('/customer/tickets/me');
+
+            if (response.status === 401) {
+                alert('로그인이 필요한 서비스입니다.');
+                window.location.href = '/login.html';
+                return;
+            }
+
+            if (response.status === 403) {
+                errorElement.innerText = '❌ 권한이 없습니다 (403 Forbidden)';
+                return;
+            }
+
+            if (!response.ok) {
+                errorElement.innerText = `❌ 조회 실패 (${response.status})`;
+                return;
+            }
+
+            const data = await response.json();
+            
+            containerElement.style.display = 'block';
+            listElement.innerHTML = '';
+
+            const tickets = Array.isArray(data) ? data : [data];
+
+            if (tickets.length === 0) {
+                listElement.innerHTML = '<p>보유 중인 수강권이 없습니다.</p>';
+                return;
+            }
+
+            tickets.forEach(ticket => {
+                const item = document.createElement('div');
+                item.className = 'ticket-item';
+                item.innerHTML = `
+                    <p style="margin: 4px 0;"><strong>🎫 수강권 ID:</strong> ${ticket.ticketId || ticket.id || '-'}</p>
+                    <p style="margin: 4px 0;"><strong>🔢 잔여 횟수 / 총 횟수:</strong> ${ticket.remainingCount ?? '-'}회 / ${ticket.totalCount ?? '-'}회</p>
+                    <p style="margin: 4px 0;"><strong>📅 유효 기간:</strong> ${ticket.startDate || ''} ~ ${ticket.endDate || ''}</p>
+                `;
+                listElement.appendChild(item);
+            });
+        }
+
+        // 수강권 1회 차감/사용 함수
+        async function useTicket() {
+            const resultElement = document.getElementById('useTicketResult');
+            resultElement.innerText = '';
+            resultElement.style.color = '#212529';
+
+            const response = await jwtFetch('/customer/tickets/use', {
+                method: 'POST'
+            });
+
+            if (response.status === 401) {
+                alert('로그인이 필요한 서비스입니다.');
+                window.location.href = '/login.html';
+                return;
+            }
+
+            if (response.status === 403) {
+                resultElement.style.color = '#dc3545';
+                resultElement.innerText = '❌ 권한이 없습니다 (403 Forbidden)';
+                return;
+            }
+
+            const responseText = await response.text();
+
+            if (!response.ok) {
+                resultElement.style.color = '#dc3545';
+                resultElement.innerText = `❌ 차감 실패: ${responseText || response.status}`;
+                return;
+            }
+
+            // 성공
+            resultElement.style.color = '#198754';
+            resultElement.innerText = `⭕ ${responseText}`;
+
+            // 차감 성공 시 내 수강권 목록 자동 새로고침
+            getMyTickets();
+        }
+    </script>
+</body>
+</html>
