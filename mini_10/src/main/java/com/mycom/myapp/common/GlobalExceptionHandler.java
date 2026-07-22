@@ -41,6 +41,11 @@ public class GlobalExceptionHandler {
         return error(HttpStatus.BAD_REQUEST, exception.getMessage());
     }
 
+    @ExceptionHandler({IllegalStateException.class, IllegalArgumentException.class})
+    public ResponseEntity<ApiErrorResponse> handleBadRequest(RuntimeException exception) {
+        return error(HttpStatus.BAD_REQUEST, exception.getMessage());
+    }
+
     private ResponseEntity<ApiErrorResponse> error(HttpStatus status, String message) {
         return ResponseEntity.status(status).body(new ApiErrorResponse(
                 LocalDateTime.now(), status.value(), message, Map.of()

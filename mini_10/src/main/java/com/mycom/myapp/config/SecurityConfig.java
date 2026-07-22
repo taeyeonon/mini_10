@@ -7,7 +7,6 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.http.HttpMethod;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
@@ -74,9 +73,6 @@ public class SecurityConfig {
 										.hasAnyRole("CUSTOMER", "TRAINER", "ADMIN")
 										
 										.requestMatchers("/customer/**").hasAnyRole("CUSTOMER", "ADMIN")
-										.requestMatchers("/api/trainer/**").hasRole("TRAINER")
-										.requestMatchers(HttpMethod.GET, "/api/schedules/**")
-											.hasAnyRole("CUSTOMER", "TRAINER", "ADMIN")
 										.requestMatchers("/admin/**").hasRole("ADMIN")
 										.anyRequest().authenticated()
 				)
