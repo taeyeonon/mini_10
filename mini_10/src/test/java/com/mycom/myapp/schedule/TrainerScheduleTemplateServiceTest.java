@@ -66,7 +66,7 @@ class TrainerScheduleTemplateServiceTest {
 
         assertThatThrownBy(() -> templateService.create("trainer@example.com", request))
                 .isInstanceOf(InvalidOperationException.class)
-                .hasMessage("媛숈? ?붿씪怨??쒓컙????대? 諛섎났 ?쇱젙???덉뒿?덈떎.");
+                .hasMessage("같은 요일과 시간대에 이미 반복 일정이 있습니다.");
     }
 
     @Test
@@ -121,7 +121,7 @@ class TrainerScheduleTemplateServiceTest {
         return User.builder()
                 .email("trainer@example.com")
                 .password("encoded")
-                .name("트레이너")
+                .name("?몃젅?대꼫")
                 .userRoles(List.of(role))
                 .build();
     }

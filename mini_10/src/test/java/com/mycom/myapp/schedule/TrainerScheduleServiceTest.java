@@ -75,12 +75,12 @@ class TrainerScheduleServiceTest {
         assertThatThrownBy(() -> scheduleService.create(
                 "trainer@example.com", new ScheduleCreateRequest(start, end, 10)))
                 .isInstanceOf(InvalidOperationException.class)
-                .hasMessage("媛숈? ?쒓컙????대? ?깅줉???섏뾽???덉뒿?덈떎.");
+                .hasMessage("같은 시간대에 이미 등록된 수업이 있습니다.");
     }
 
     @Test
     void createRejectsNonTrainer() {
-        User member = user("member@example.com", "회원", "CUSTOMER");
+        User member = user("member@example.com", "?뚯썝", "CUSTOMER");
         when(memberRepository.findByEmail("member@example.com")).thenReturn(Optional.of(member));
 
         assertThatThrownBy(() -> scheduleService.create(
@@ -101,11 +101,11 @@ class TrainerScheduleServiceTest {
         assertThatThrownBy(() -> scheduleService.create(
                 "trainer@example.com", new ScheduleCreateRequest(start, start.minusHours(1), 10)))
                 .isInstanceOf(InvalidOperationException.class)
-                .hasMessage("醫낅즺 ?쒓컖? ?쒖옉 ?쒓컖蹂대떎 ?댄썑?ъ빞 ?⑸땲??");
+                .hasMessage("종료 시각은 시작 시각보다 이후여야 합니다.");
     }
 
     private User trainer() {
-        return user("trainer@example.com", "트레이너", "TRAINER");
+        return user("trainer@example.com", "?몃젅?대꼫", "TRAINER");
     }
 
     private User user(String email, String name, String roleName) {
