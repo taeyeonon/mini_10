@@ -1,5 +1,11 @@
 package com.mycom.myapp.reservation.service;
 
+import java.time.LocalDateTime;
+import java.util.List;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.mycom.myapp.common.InvalidOperationException;
 import com.mycom.myapp.common.ResourceNotFoundException;
 import com.mycom.myapp.reservation.dto.ReservationResponse;
@@ -10,33 +16,31 @@ import com.mycom.myapp.schedule.ScheduleStatus;
 import com.mycom.myapp.schedule.TrainerSchedule;
 import com.mycom.myapp.schedule.TrainerScheduleRepository;
 import com.mycom.myapp.ticket.entity.Ticket;
-import com.mycom.myapp.ticket.repository.TicketRepository;
+import com.mycom.myapp.ticket.service.TicketService;
 import com.mycom.myapp.user.entity.User;
 import com.mycom.myapp.user.repository.UserRepository;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.util.List;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+
+import lombok.extern.slf4j.Slf4j;
 
 @Service
 @Transactional(readOnly = true)
+@Slf4j
 public class ReservationService {
 
     private final ReservationRepository reservationRepository;
     private final TrainerScheduleRepository scheduleRepository;
-    private final TicketRepository ticketRepository;
+    private final TicketService ticketService;
     private final UserRepository userRepository;
 
     public ReservationService(
             ReservationRepository reservationRepository,
             TrainerScheduleRepository scheduleRepository,
-            TicketRepository ticketRepository,
+            TicketService ticketService,
             UserRepository userRepository
     ) {
         this.reservationRepository = reservationRepository;
         this.scheduleRepository = scheduleRepository;
-        this.ticketRepository = ticketRepository;
+        this.ticketService = ticketService;
         this.userRepository = userRepository;
     }
 
@@ -55,13 +59,7 @@ public class ReservationService {
             throw new InvalidOperationException("이미 예약한 수업입니다.");
         }
 
-        LocalDate today = LocalDate.now();
-        Ticket ticket = ticketRepository
-                .findFirstByUserIdAndRemainingCountGreaterThanAndStartDateLessThanEqualAndEndDateGreaterThanEqualOrderByIdAsc(
-                        memberId, 0, today, today)
-                .orElseThrow(() -> new InvalidOperationException("사용 가능한 수강권이 없습니다."));
-
-        ticket.use();
+        Ticket ticket = ticketService.useTicketAndGet(memberId);
         schedule.increaseReservedCount();
 
         Reservation reservation;
@@ -82,9 +80,12 @@ public class ReservationService {
             throw new InvalidOperationException("이미 취소된 예약입니다.");
         }
 
-        reservation.getTicket().cancel();
+        ticketService.cancelTicket(reservation.getTicket());
+        
         reservation.getTrainerSchedule().decreaseReservedCount();
         reservation.cancel();
+        reservationRepository.save(reservation);
+        
         return ReservationResponse.from(reservation);
     }
 
