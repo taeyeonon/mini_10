@@ -2,142 +2,160 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>사용자 페이지 - 내 수강권</title>
+    <title>회원 수업 예약</title>
     <style>
-        body { font-family: sans-serif; padding: 40px; }
-        .card { border: 1px solid #ddd; padding: 20px; border-radius: 8px; margin-bottom: 20px; width: 450px; background-color: #fff; }
-        .header-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; width: 490px; }
-        button { padding: 8px 16px; cursor: pointer; border-radius: 4px; border: 1px solid #ccc; }
-        .back-btn { background-color: #6c757d; color: white; border: none; }
-        .logout-btn { background-color: #dc3545; color: white; border: none; }
-        .primary-btn { background-color: #198754; color: white; border: none; padding: 8px 16px; }
-        .warning-btn { background-color: #ffc107; color: #212529; border: none; padding: 8px 16px; font-weight: bold; }
-        .ticket-box { background-color: #f8f9fa; border: 1px solid #e9ecef; padding: 12px; border-radius: 6px; margin-top: 10px; }
-        .ticket-item { border-bottom: 1px dashed #ccc; padding-bottom: 8px; margin-bottom: 8px; }
-        .ticket-item:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+        body { font-family: sans-serif; padding: 36px; background: #f7f8fa; }
+        .header { display: flex; justify-content: space-between; align-items: center; max-width: 780px; }
+        .card { max-width: 740px; margin: 18px 0; padding: 22px; border: 1px solid #ddd; border-radius: 9px; background: white; }
+        button { padding: 9px 15px; border: 0; border-radius: 5px; cursor: pointer; }
+        .primary { background: #198754; color: white; }
+        .secondary { background: #6c757d; color: white; }
+        .danger { background: #dc3545; color: white; }
+        .item { padding: 14px; margin-top: 10px; border: 1px solid #ddd; border-radius: 7px; background: #fafafa; }
+        .item p { margin: 6px 0; }
+        .muted { color: #6c757d; font-size: 14px; }
+        .error { color: #dc3545; white-space: pre-wrap; }
     </style>
 </head>
 <body>
-
-    <div class="header-bar">
-        <h2>🙋‍♂️ 사용자 전용 페이지</h2>
-        <div>
-            <button class="back-btn" onclick="location.href='/board.html'">🔙 메인으로</button>
-            <button class="logout-btn" onclick="jwtLogout()">로그아웃</button>
-        </div>
+<div class="header">
+    <h2>회원 수업 예약</h2>
+    <div>
+        <button class="secondary" onclick="location.href='/board.html'">메인으로</button>
+        <button class="danger" onclick="jwtLogout()">로그아웃</button>
     </div>
+</div>
 
-    <!-- CUSTOMER 수강권 조회 카드 -->
-    <div class="card">
-        <h3>🎟️ 내 수강권 조회</h3>
-        <p style="font-size: 13px; color: #6c757d;">로그인한 회원의 수강권 잔여 횟수 및 정보 조회</p>
-        
-        <button class="primary-btn" onclick="getMyTickets()">내 수강권 불러오기</button>
-        
-        <div id="ticketContainer" class="ticket-box" style="display: none;">
-            <div id="ticketList"></div>
-        </div>
-        <p id="ticketError" style="color: #dc3545;"></p>
-    </div>
+<div class="card">
+    <h3>내 수강권</h3>
+    <p class="muted">예약하면 사용 가능한 수강권이 자동으로 1회 차감됩니다.</p>
+    <button class="primary" onclick="loadTickets()">수강권 새로고침</button>
+    <div id="ticketList"></div>
+    <p id="ticketError" class="error"></p>
+</div>
 
-    <!-- CUSTOMER 수강권 차감/사용 카드 -->
-    <div class="card">
-        <h3>🎟️ 수강권 사용 테스트</h3>
-        <p style="font-size: 13px; color: #6c757d;">수강권을 1회 차감합니다. (POST /customer/tickets/use)</p>
-        
-        <button class="warning-btn" onclick="useTicket()">수강권 1회 차감하기</button>
-        <p id="useTicketResult" style="margin-top: 10px; font-weight: bold;"></p>
-    </div>
+<div class="card">
+    <h3>예약 가능한 수업</h3>
+    <button class="primary" onclick="loadSchedules()">수업 새로고침</button>
+    <div id="scheduleList"></div>
+    <p id="scheduleError" class="error"></p>
+</div>
 
-    <script src="/assets/js/common.js"></script>
-    <script>
-        // 내 수강권 조회 함수
-        async function getMyTickets() {
-            const errorElement = document.getElementById('ticketError');
-            const containerElement = document.getElementById('ticketContainer');
-            const listElement = document.getElementById('ticketList');
+<div class="card">
+    <h3>내 예약 내역</h3>
+    <button class="primary" onclick="loadReservations()">예약 새로고침</button>
+    <div id="reservationList"></div>
+    <p id="reservationError" class="error"></p>
+</div>
 
-            errorElement.innerText = '';
-            
-            const response = await jwtFetch('/customer/tickets/me');
+<script src="/assets/js/common.js"></script>
+<script>
+    async function request(url, options = {}) {
+        const response = await jwtFetch(url, options);
+        if (response.status === 401) {
+            alert('로그인이 필요합니다.');
+            location.href = '/login.html';
+            throw new Error('로그인 필요');
+        }
+        const text = await response.text();
+        let data = null;
+        if (text) {
+            try { data = JSON.parse(text); } catch (_) { data = text; }
+        }
+        if (!response.ok) {
+            throw new Error(data?.message || data || `요청 실패 (${response.status})`);
+        }
+        return data;
+    }
 
-            if (response.status === 401) {
-                alert('로그인이 필요한 서비스입니다.');
-                window.location.href = '/login.html';
-                return;
-            }
-
-            if (response.status === 403) {
-                errorElement.innerText = '❌ 권한이 없습니다 (403 Forbidden)';
-                return;
-            }
-
-            if (!response.ok) {
-                errorElement.innerText = `❌ 조회 실패 (${response.status})`;
-                return;
-            }
-
-            const data = await response.json();
-            
-            containerElement.style.display = 'block';
-            listElement.innerHTML = '';
-
-            const tickets = Array.isArray(data) ? data : [data];
-
-            if (tickets.length === 0) {
-                listElement.innerHTML = '<p>보유 중인 수강권이 없습니다.</p>';
-                return;
-            }
-
+    async function loadTickets() {
+        const list = document.getElementById('ticketList');
+        const error = document.getElementById('ticketError');
+        error.textContent = '';
+        try {
+            const tickets = await request('/customer/tickets/me');
+            list.innerHTML = tickets.length ? '' : '<p class="muted">보유한 수강권이 없습니다.</p>';
             tickets.forEach(ticket => {
                 const item = document.createElement('div');
-                item.className = 'ticket-item';
-                item.innerHTML = `
-                    <p style="margin: 4px 0;"><strong>🎫 수강권 ID:</strong> ${ticket.ticketId || ticket.id || '-'}</p>
-                    <p style="margin: 4px 0;"><strong>🔢 잔여 횟수 / 총 횟수:</strong> ${ticket.remainingCount ?? '-'}회 / ${ticket.totalCount ?? '-'}회</p>
-                    <p style="margin: 4px 0;"><strong>📅 유효 기간:</strong> ${ticket.startDate || ''} ~ ${ticket.endDate || ''}</p>
-                `;
-                listElement.appendChild(item);
+                item.className = 'item';
+                item.innerHTML = `<strong>수강권 #${ticket.ticketId ?? ticket.id}</strong>
+                    <p>잔여 횟수: ${ticket.remainingCount} / ${ticket.totalCount}</p>
+                    <p>사용 기간: ${ticket.startDate} ~ ${ticket.endDate}</p>`;
+                list.appendChild(item);
             });
-        }
+        } catch (e) { error.textContent = e.message; }
+    }
 
-        // 수강권 1회 차감/사용 함수
-        async function useTicket() {
-            const resultElement = document.getElementById('useTicketResult');
-            resultElement.innerText = '';
-            resultElement.style.color = '#212529';
-
-            const response = await jwtFetch('/customer/tickets/use', {
-                method: 'POST'
+    async function loadSchedules() {
+        const list = document.getElementById('scheduleList');
+        const error = document.getElementById('scheduleError');
+        error.textContent = '';
+        try {
+            const schedules = await request('/api/schedules');
+            list.innerHTML = schedules.length ? '' : '<p class="muted">예약 가능한 수업이 없습니다.</p>';
+            schedules.forEach(schedule => {
+                const item = document.createElement('div');
+                item.className = 'item';
+                const disabled = schedule.full || schedule.status !== 'OPEN';
+                item.innerHTML = `<strong>${schedule.trainerName} 트레이너</strong>
+                    <p>${formatDateTime(schedule.startTime)} ~ ${formatDateTime(schedule.endTime)}</p>
+                    <p>예약 ${schedule.reservedCount} / 정원 ${schedule.capacity} · 잔여 ${schedule.availableCount}명</p>
+                    <button class="primary" ${disabled ? 'disabled' : ''}
+                        onclick="reserve(${schedule.id})">${disabled ? '예약 불가' : '예약하기'}</button>`;
+                list.appendChild(item);
             });
+        } catch (e) { error.textContent = e.message; }
+    }
 
-            if (response.status === 401) {
-                alert('로그인이 필요한 서비스입니다.');
-                window.location.href = '/login.html';
-                return;
-            }
+    async function reserve(scheduleId) {
+        if (!confirm('이 수업을 예약할까요? 수강권이 1회 차감됩니다.')) return;
+        try {
+            await request(`/customer/reservations/schedules/${scheduleId}`, {method: 'POST'});
+            alert('예약이 완료되었습니다.');
+            await Promise.all([loadTickets(), loadSchedules(), loadReservations()]);
+        } catch (e) { alert(e.message); }
+    }
 
-            if (response.status === 403) {
-                resultElement.style.color = '#dc3545';
-                resultElement.innerText = '❌ 권한이 없습니다 (403 Forbidden)';
-                return;
-            }
+    async function loadReservations() {
+        const list = document.getElementById('reservationList');
+        const error = document.getElementById('reservationError');
+        error.textContent = '';
+        try {
+            const reservations = await request('/customer/reservations/me');
+            list.innerHTML = reservations.length ? '' : '<p class="muted">예약 내역이 없습니다.</p>';
+            reservations.forEach(reservation => {
+                const item = document.createElement('div');
+                item.className = 'item';
+                item.innerHTML = `<strong>예약 #${reservation.id}</strong>
+                    <p>수업 ID: ${reservation.trainerScheduleId} · 수강권 ID: ${reservation.ticketId}</p>
+                    <p>예약 시각: ${formatDateTime(reservation.reservedAt)} · 상태: ${reservation.status}</p>
+                    ${reservation.status === 'CONFIRMED'
+                        ? `<button class="danger" onclick="cancelReservation(${reservation.id})">예약 취소</button>` : ''}`;
+                list.appendChild(item);
+            });
+        } catch (e) { error.textContent = e.message; }
+    }
 
-            const responseText = await response.text();
+    async function cancelReservation(reservationId) {
+        if (!confirm('예약을 취소할까요? 수강권이 복구됩니다.')) return;
+        try {
+            await request(`/customer/reservations/${reservationId}/cancel`, {method: 'PATCH'});
+            alert('예약이 취소되었습니다.');
+            await Promise.all([loadTickets(), loadSchedules(), loadReservations()]);
+        } catch (e) { alert(e.message); }
+    }
 
-            if (!response.ok) {
-                resultElement.style.color = '#dc3545';
-                resultElement.innerText = `❌ 차감 실패: ${responseText || response.status}`;
-                return;
-            }
+    function formatDateTime(value) {
+        return value ? value.replace('T', ' ').slice(0, 16) : '-';
+    }
 
-            // 성공
-            resultElement.style.color = '#198754';
-            resultElement.innerText = `⭕ ${responseText}`;
-
-            // 차감 성공 시 내 수강권 목록 자동 새로고침
-            getMyTickets();
+    document.addEventListener('DOMContentLoaded', () => {
+        if (!getJwtToken()) {
+            location.href = '/login.html';
+            return;
         }
-    </script>
+        Promise.all([loadTickets(), loadSchedules(), loadReservations()]);
+    });
+</script>
 </body>
 </html>
