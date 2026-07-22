@@ -27,7 +27,7 @@ public class ReservationController {
     @PostMapping("/schedules/{scheduleId}")
     public ResponseEntity<ReservationResponse> reserve(
             @AuthenticationPrincipal MyUserDetails userDetails,
-            @PathVariable Long scheduleId
+            @PathVariable("scheduleId") Long scheduleId
     ) {
         ReservationResponse response = reservationService.reserve(userDetails.getId(), scheduleId);
         return ResponseEntity.created(
