@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>트레이너 일정 관리</title>
+    <style>
+        body { font-family: sans-serif; padding: 36px; background: #f7f8fa; }
+        .header { display: flex; justify-content: space-between; align-items: center; max-width: 760px; }
+        .card { max-width: 720px; margin: 18px 0; padding: 22px; border: 1px solid #ddd; border-radius: 9px; background: white; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        label { display: flex; flex-direction: column; gap: 5px; font-size: 14px; }
+        input, select { padding: 9px; border: 1px solid #bbb; border-radius: 5px; }
+        button { padding: 9px 15px; border: 0; border-radius: 5px; cursor: pointer; }
+        .primary { background: #e0a800; color: #212529; font-weight: bold; }
+        .secondary { background: #6c757d; color: white; }
+        .danger { background: #dc3545; color: white; }
+        .schedule { padding: 12px; margin-top: 9px; border: 1px solid #ddd; border-radius: 6px; }
+        .message { margin-top: 12px; white-space: pre-wrap; }
+    </style>
+</head>
+<body>
+<div class="header">
+    <h2>트레이너 일정 관리</h2>
+    <div>
+        <button class="secondary" onclick="location.href='/board.html'">메인으로</button>
+        <button class="danger" onclick="jwtLogout()">로그아웃</button>
+    </div>
+</div>
+
+<div class="card">
+    <h3>수업 일정 생성</h3>
+    <div class="grid">
+        <label>시작 시각<input id="startTime" type="datetime-local"></label>
+        <label>종료 시각<input id="endTime" type="datetime-local"></label>
+        <label>정원<input id="capacity" type="number" min="1" value="10"></label>
+    </div>
+    <p><button class="primary" onclick="createSchedule()">일정 생성</button></p>
+    <div id="createMessage" class="message"></div>
+</div>
+
+<div class="card">
+    <h3>요일별 반복 일정</h3>
+    <div class="grid">
+        <label>요일
+            <select id="dayOfWeek">
+                <option value="MONDAY">월요일</option><option value="TUESDAY">화요일</option>
+                <option value="WEDNESDAY">수요일</option><option value="THURSDAY">목요일</option>
+                <option value="FRIDAY">금요일</option><option value="SATURDAY">토요일</option>
+                <option value="SUNDAY">일요일</option>
+            </select>
+        </label>
+        <label>시작 시간<input id="templateStart" type="time" value="10:00"></label>
+        <label>종료 시간<input id="templateEnd" type="time" value="11:00"></label>
+        <label>정원<input id="templateCapacity" type="number" min="1" value="10"></label>
+        <label>적용 시작일<input id="effectiveFrom" type="date"></label>
+        <label>적용 종료일<input id="effectiveTo" type="date"></label>
+    </div>
+    <p><button class="primary" onclick="createTemplate()">반복 일정 등록</button></p>
+    <div id="templateMessage" class="message"></div>
+</div>
+
+<div class="card">
+    <h3>내 수업 일정</h3>
+    <button class="primary" onclick="loadSchedules()">일정 새로고침</button>
+    <div id="scheduleList"></div>
+</div>
+
+<script src="/assets/js/common.js"></script>
+<script>
+    async function request(url, options = {}) {
+        const response = await jwtFetch(url, options);
+        if (response.status === 401) {
+            alert('로그인이 필요합니다.');
+            location.href = '/login.html';
+            throw new Error('로그인 필요');
+        }
+        const text = await response.text();
+        const data = text ? JSON.parse(text) : null;
+        if (!response.ok) throw new Error(data?.message || `요청 실패 (${response.status})`);
+        return data;
+    }
+
+    async function createSchedule() {
+        const message = document.getElementById('createMessage');
+        try {
+            const data = await request('/api/trainer/schedules', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    startTime: document.getElementById('startTime').value,
+                    endTime: document.getElementById('endTime').value,
+                    capacity: Number(document.getElementById('capacity').value)
+                })
+            });
+            message.textContent = `일정 생성 성공 (ID: ${data.id})`;
+            await loadSchedules();
+        } catch (e) { message.textContent = e.message; }
+    }
+
+    async function createTemplate() {
+        const message = document.getElementById('templateMessage');
+        const endDate = document.getElementById('effectiveTo').value;
+        try {
+            const data = await request('/api/trainer/schedule-templates', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    dayOfWeek: document.getElementById('dayOfWeek').value,
+                    startTime: document.getElementById('templateStart').value,
+                    endTime: document.getElementById('templateEnd').value,
+                    capacity: Number(document.getElementById('templateCapacity').value),
+                    effectiveFrom: document.getElementById('effectiveFrom').value,
+                    effectiveTo: endDate || null
+                })
+            });
+            message.textContent = `반복 일정 등록 성공 (ID: ${data.id})`;
+        } catch (e) { message.textContent = e.message; }
+    }
+
+    async function loadSchedules() {
+        const list = document.getElementById('scheduleList');
+        try {
+            const schedules = await request('/api/trainer/schedules');
+            list.innerHTML = schedules.length ? '' : '<p>등록한 일정이 없습니다.</p>';
+            schedules.forEach(schedule => {
+                const item = document.createElement('div');
+                item.className = 'schedule';
+                item.innerHTML = `<strong>#${schedule.id} ${schedule.startTime} ~ ${schedule.endTime}</strong>
+                    <p>정원 ${schedule.capacity}명 / 예약 ${schedule.reservedCount}명 / 상태 ${schedule.status}</p>
+                    <button class="danger" onclick="cancelSchedule(${schedule.id})">일정 취소</button>`;
+                list.appendChild(item);
+            });
+        } catch (e) { list.textContent = e.message; }
+    }
+
+    async function cancelSchedule(id) {
+        if (!confirm('이 일정을 취소할까요?')) return;
+        try {
+            await request(`/api/trainer/schedules/${id}/cancel`, {method: 'PATCH'});
+            await loadSchedules();
+        } catch (e) { alert(e.message); }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        if (!getJwtToken()) location.href = '/login.html';
+        loadSchedules();
+    });
+</script>
+</body>
+</html>
