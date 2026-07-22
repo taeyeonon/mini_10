@@ -68,53 +68,5 @@ public class UserServiceImpl implements UserService{
 		return userResultDto;
 
 	}
-	
 
-	// ═══════════════════════════════════════════════
-	// 내 예약 내역 조회 : 로그인한 회원의 예약 목록
-	// ═══════════════════════════════════════════════
-	@Override
-	@Transactional
-	public List<ReservationDto> getMyReservations(Long userId) {
-		// 이 회원의 모든 예약 조회
-		List<Reservation> reservations = reservationRepository.findByMemberIdOrderByReservedAtDesc(userId);
-		
-		// Reservation 엔티티 → ReservationDto 변환
-		return reservations.stream()
-					.map(res -> ReservationDto.builder()
-						.id(res.getId())
-						.trainerScheduleId(res.getTrainerSchedule().getId())
-						.trainerName(res.getTrainerSchedule().getTrainer().getName())
-						.startTime(res.getTrainerSchedule().getStartTime())
-						.endTime(res.getTrainerSchedule().getEndTime())
-						.ticketId(res.getTicket().getId())
-						.reservedAt(res.getReservedAt())
-						.status(res.getStatus().name())
-						.build())
-					.toList();
-	}
-
-
-	@Override
-	@Transactional
-	public UserResultDto getUserById(Long id) {
-		UserResultDto userResultDto = new UserResultDto();
-		
-		try {
-			User user = userRepository.findById(id)
-								.orElseThrow( () -> new IllegalArgumentException("사용자를 찾을 수 없습니다"));
-			
-			UserDto userDto = UserDto.builder()
-									.id(user.getId())
-									.name(user.getName())
-									.email(user.getEmail())
-									.build();
-			userResultDto.setResult("success");
-			userResultDto.setUserDto(userDto);
-		}catch(Exception e) {
-			e.printStackTrace();
-			userResultDto.setResult("fail");
-		}
-		return userResultDto;
-	}
 }

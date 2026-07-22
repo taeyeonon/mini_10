@@ -1,5 +1,6 @@
 package com.mycom.myapp.reservation.dto;
 
+import java.time.LocalDateTime;
 import java.util.Date;
 
 import jakarta.persistence.Id;
@@ -13,9 +14,11 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class ReservationDto {
-	@Id
 	private Long id;
 	private Long trainerScheduleId;
+	private String trainerName;
+	private LocalDateTime stardTime;
+	private LocalDateTime endTime;
 	private Long ticketId;
 	private Date reservedAt;
 	private String status;

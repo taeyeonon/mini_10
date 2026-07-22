@@ -10,12 +10,5 @@ public interface UserService {
 
 	// 회원가입
 	UserResultDto insertUser(UserDto userDto);
-
-	// 로그인한 회원의 예약 내역 조회
-	List<ReservationDto> getMyReservations(Long memberId);
-	
-	// 회원 정보 조회
-	UserResultDto getUserById(Long id);
-	
 	
 }
