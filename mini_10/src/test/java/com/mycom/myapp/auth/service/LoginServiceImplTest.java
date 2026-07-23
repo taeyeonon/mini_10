@@ -6,7 +6,10 @@ import static org.mockito.Mockito.when;
 
 import com.mycom.myapp.auth.dto.LoginResultDto;
 import com.mycom.myapp.jwt.JwtUtil;
+import com.mycom.myapp.user.entity.User;
+import com.mycom.myapp.user.repository.UserRepository;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -28,11 +31,14 @@ class LoginServiceImplTest {
     @Mock
     private Authentication authentication;
 
+    @Mock
+    private UserRepository userRepository;
+
     private LoginServiceImpl loginService;
 
     @BeforeEach
     void setUp() {
-        loginService = new LoginServiceImpl(authenticationManager, jwtUtil);
+        loginService = new LoginServiceImpl(authenticationManager, jwtUtil, userRepository);
     }
 
     @Test
@@ -43,6 +49,9 @@ class LoginServiceImplTest {
                 (java.util.Collection) List.of((GrantedAuthority) () -> "ROLE_CUSTOMER"));
         when(jwtUtil.createToken("customer@example.com", List.of("ROLE_CUSTOMER")))
                 .thenReturn("jwt-token-value");
+        when(userRepository.findByEmail("customer@example.com")).thenReturn(Optional.of(
+                User.builder().id(1L).email("customer@example.com")
+                        .name("홍길동").password("encoded").build()));
 
         LoginResultDto result = loginService.login("customer@example.com", "password123");
 
@@ -50,5 +59,6 @@ class LoginServiceImplTest {
         assertThat(result.getToken()).isEqualTo("jwt-token-value");
         assertThat(result.getUserDto()).isNotNull();
         assertThat(result.getUserDto().getEmail()).isEqualTo("customer@example.com");
+        assertThat(result.getUserDto().getName()).isEqualTo("홍길동");
     }
 }

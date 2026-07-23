@@ -6,6 +6,8 @@
     <style>
         body { font-family: sans-serif; padding: 36px; background: #f7f8fa; }
         .header { display: flex; justify-content: space-between; align-items: center; max-width: 760px; }
+        .header-actions { display: flex; align-items: center; gap: 9px; }
+        .current-user { color: #495057; font-size: 14px; font-weight: bold; }
         .card { max-width: 720px; margin: 18px 0; padding: 22px; border: 1px solid #ddd; border-radius: 9px; background: white; }
         .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
         label { display: flex; flex-direction: column; gap: 5px; font-size: 14px; }
@@ -22,7 +24,8 @@
 <body>
 <div class="header">
     <h2>트레이너 일정 관리</h2>
-    <div>
+    <div class="header-actions">
+        <span class="current-user"></span>
         <button class="secondary" onclick="location.href='/board.html'">메인으로</button>
         <button class="danger" onclick="jwtLogout()">로그아웃</button>
     </div>
@@ -249,6 +252,7 @@
 
     document.addEventListener('DOMContentLoaded', () => {
         if (!getJwtToken()) location.href = '/login.html';
+        renderCurrentUser();
         document.getElementById('startTime').addEventListener('change', setDefaultEndTime);
         document.getElementById('effectiveFrom').addEventListener('change', updateEffectiveEndDate);
         const tomorrow = new Date();

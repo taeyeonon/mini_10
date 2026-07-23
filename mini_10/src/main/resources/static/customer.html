@@ -6,6 +6,8 @@
     <style>
         body { font-family: sans-serif; padding: 36px; background: #f7f8fa; }
         .header { display: flex; justify-content: space-between; align-items: center; max-width: 780px; }
+        .header-actions { display: flex; align-items: center; gap: 9px; }
+        .current-user { color: #495057; font-size: 14px; font-weight: bold; }
         .card { max-width: 740px; margin: 18px 0; padding: 22px; border: 1px solid #ddd; border-radius: 9px; background: white; }
         button { padding: 9px 15px; border: 0; border-radius: 5px; cursor: pointer; }
         .primary { background: #198754; color: white; }
@@ -15,15 +17,29 @@
         .item p { margin: 6px 0; }
         .muted { color: #6c757d; font-size: 14px; }
         .error { color: #dc3545; white-space: pre-wrap; }
+        select { padding: 9px; border: 1px solid #bbb; border-radius: 5px; margin-right: 8px; }
     </style>
 </head>
 <body>
 <div class="header">
     <h2>회원 수업 예약</h2>
-    <div>
+    <div class="header-actions">
+        <span class="current-user"></span>
         <button class="secondary" onclick="location.href='/board.html'">메인으로</button>
         <button class="danger" onclick="jwtLogout()">로그아웃</button>
     </div>
+</div>
+
+<div class="card">
+    <h3>수강권 구매</h3>
+    <p class="muted">테스트 가격 1회당 100원 · 결제 승인 완료 후 수강권이 자동 지급됩니다.</p>
+    <select id="purchaseCount" onchange="updatePurchasePrice()">
+        <option value="1">1회권</option>
+        <option value="5">5회권</option>
+        <option value="10" selected>10회권</option>
+    </select>
+    <button id="paymentButton" class="primary" onclick="purchaseTicket()">1,000원 결제하기</button>
+    <p id="paymentMessage" class="error"></p>
 </div>
 
 <div class="card">
@@ -48,6 +64,7 @@
     <p id="reservationError" class="error"></p>
 </div>
 
+<script src="https://js.tosspayments.com/v2/standard"></script>
 <script src="/assets/js/common.js"></script>
 <script>
     async function request(url, options = {}) {
@@ -84,6 +101,64 @@
                 list.appendChild(item);
             });
         } catch (e) { error.textContent = e.message; }
+    }
+
+    function updatePurchasePrice() {
+        const count = Number(document.getElementById('purchaseCount').value);
+        document.getElementById('paymentButton').textContent =
+            `${(count * 100).toLocaleString()}원 결제하기`;
+    }
+
+    async function purchaseTicket() {
+        const count = Number(document.getElementById('purchaseCount').value);
+        const button = document.getElementById('paymentButton');
+        button.disabled = true;
+        try {
+            const order = await request('/customer/payments/orders', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ticketCount: count})
+            });
+            const tossPayments = TossPayments(order.clientKey);
+            const payment = tossPayments.payment({customerKey: order.customerKey});
+            await payment.requestPayment({
+                method: 'CARD',
+                amount: {currency: 'KRW', value: order.amount},
+                orderId: order.orderId,
+                orderName: order.orderName,
+                customerName: order.customerName,
+                customerEmail: order.customerEmail,
+                successUrl: `${location.origin}/customer.html?payment=success`,
+                failUrl: `${location.origin}/customer.html?payment=fail`
+            });
+        } catch (e) {
+            document.getElementById('paymentMessage').textContent = e.message;
+            button.disabled = false;
+        }
+    }
+
+    async function handlePaymentResult() {
+        const params = new URLSearchParams(location.search);
+        if (params.get('payment') === 'success') {
+            try {
+                const result = await request('/customer/payments/confirm', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        paymentKey: params.get('paymentKey'),
+                        orderId: params.get('orderId'),
+                        amount: Number(params.get('amount'))
+                    })
+                });
+                alert(`${result.ticketCount}회 수강권 구매가 완료되었습니다.`);
+                history.replaceState({}, '', '/customer.html');
+                await loadTickets();
+            } catch (e) {
+                document.getElementById('paymentMessage').textContent = e.message;
+            }
+        } else if (params.get('payment') === 'fail') {
+            document.getElementById('paymentMessage').textContent =
+                params.get('message') || '결제가 취소되거나 실패했습니다.';
+            history.replaceState({}, '', '/customer.html');
+        }
     }
 
     async function loadSchedules() {
@@ -150,10 +225,12 @@
     }
 
     document.addEventListener('DOMContentLoaded', () => {
-        if (!getJwtToken()) {
-            location.href = '/login.html';
-            return;
-        }
+            if (!getJwtToken()) {
+                location.href = '/login.html';
+                return;
+            }
+            renderCurrentUser();
+        handlePaymentResult();
         Promise.all([loadTickets(), loadSchedules(), loadReservations()]);
     });
 </script>

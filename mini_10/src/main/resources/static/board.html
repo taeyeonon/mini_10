@@ -7,6 +7,8 @@
         body { font-family: sans-serif; padding: 40px; }
         .header-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; width: 500px; }
         .logout-btn { background-color: #dc3545; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; }
+        .user-actions { display: flex; align-items: center; gap: 10px; }
+        .current-user { color: #495057; font-size: 14px; font-weight: bold; }
         .card { border: 1px solid #ddd; padding: 24px; border-radius: 8px; width: 450px; background-color: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
         .nav-group { display: flex; flex-direction: column; gap: 12px; margin-top: 20px; }
         .nav-btn { width: 100%; padding: 14px; font-size: 15px; font-weight: bold; text-align: left; border: 1px solid #ccc; border-radius: 6px; cursor: pointer; background-color: #f8f9fa; transition: all 0.2s; }
@@ -20,7 +22,10 @@
 
     <div class="header-bar">
         <h2>📌 메인 게시판</h2>
-        <button class="logout-btn" onclick="jwtLogout()">로그아웃</button>
+        <div class="user-actions">
+            <span class="current-user"></span>
+            <button class="logout-btn" onclick="jwtLogout()">로그아웃</button>
+        </div>
     </div>
 
     <div class="card">
@@ -53,8 +58,9 @@
             }
 
             try {
-                const payload = JSON.parse(atob(token.split('.')[1]));
+                const payload = getJwtPayload();
                 userRoles = payload.roles || payload.auth || [];
+                renderCurrentUser();
             } catch (e) {
                 console.error("토큰 파싱 실패:", e);
             }

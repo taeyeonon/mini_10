@@ -29,14 +29,19 @@ public class TicketServiceImpl implements TicketService{
 	// 수강권 발급
 	@Transactional
 	public Long issueTicket(TicketCreateRequestDto dto) {
-		User user = userRepository.findById(dto.getUserId())
-				.orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다. ID: "+dto.getUserId()));
+		return issueTicket(dto.getUserId(), dto.getTotalCount(), dto.getStartDate(), dto.getEndDate());
+	}
+
+	@Transactional
+	public Long issueTicket(Long userId, int totalCount, LocalDate startDate, LocalDate endDate) {
+		User user = userRepository.findById(userId)
+				.orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다. ID: "+userId));
 		Ticket ticket = Ticket.builder()
 						.user(user)
-						.totalCount(dto.getTotalCount())
-						.remainingCount(dto.getTotalCount())
-						.startDate(dto.getStartDate())
-						.endDate(dto.getEndDate())
+						.totalCount(totalCount)
+						.remainingCount(totalCount)
+						.startDate(startDate)
+						.endDate(endDate)
 						.build();
 
 		Ticket savedTicket = ticketRepository.save(ticket);

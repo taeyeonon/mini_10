@@ -39,6 +39,7 @@
             if (data.result === 'success') {
                 // 발급받은 JWT 토큰 저장
                 sessionStorage.setItem('accessToken', data.token);
+                sessionStorage.setItem('userProfile', JSON.stringify(data.userDto || {}));
                 alert('로그인 성공!');
                 window.location.href = '/board.html';
             } else {
