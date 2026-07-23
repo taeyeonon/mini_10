@@ -15,6 +15,7 @@
         .secondary { background: #6c757d; color: white; }
         .danger { background: #dc3545; color: white; }
         .schedule { padding: 12px; margin-top: 9px; border: 1px solid #ddd; border-radius: 6px; }
+        .schedule.cancelled { opacity: 0.65; background: #f1f1f1; }
         .message { margin-top: 12px; white-space: pre-wrap; }
     </style>
 </head>
@@ -55,13 +56,15 @@
         <label>적용 시작일<input id="effectiveFrom" type="date"></label>
         <label>적용 종료일<input id="effectiveTo" type="date"></label>
     </div>
-    <p><button class="primary" onclick="createTemplate()">반복 일정 등록</button></p>
+    <p>
+        <button id="createTemplateButton" class="primary" onclick="createTemplate()">반복 일정 등록</button>
+    </p>
     <div id="templateMessage" class="message"></div>
 </div>
 
 <div class="card">
     <h3>내 수업 일정</h3>
-    <button class="primary" onclick="loadSchedules()">일정 새로고침</button>
+    <button id="refreshButton" class="primary" onclick="refreshSchedules()">일정 새로고침</button>
     <div id="scheduleList"></div>
 </div>
 
@@ -96,10 +99,17 @@
         } catch (e) { message.textContent = e.message; }
     }
 
+    let creatingTemplate = false;
+
     async function createTemplate() {
+        if (creatingTemplate) return;
+
         const message = document.getElementById('templateMessage');
+        const button = document.getElementById('createTemplateButton');
         const startDate = document.getElementById('effectiveFrom').value;
         const endDate = document.getElementById('effectiveTo').value;
+        creatingTemplate = true;
+        button.disabled = true;
         try {
             const data = await request('/api/trainer/schedule-templates', {
                 method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -113,18 +123,14 @@
                 })
             });
 
-            const today = localDate(new Date());
-            const generationStart = startDate > today ? startDate : today;
-            const generationEnd = endDate || addDays(generationStart, 30);
-            const generated = await request('/api/trainer/schedule-templates/generate', {
-                method: 'POST', headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({startDate: generationStart, endDate: generationEnd})
-            });
-
-            message.textContent = `반복 일정 등록 성공 (ID: ${data.id})\n` +
-                `실제 수업 ${generated.createdCount}개 생성, ${generated.skippedCount}개 건너뜀`;
+            message.textContent = `반복 일정과 실제 수업 등록 성공 (ID: ${data.id})`;
             await loadSchedules();
-        } catch (e) { message.textContent = e.message; }
+        } catch (e) {
+            message.textContent = e.message;
+        } finally {
+            creatingTemplate = false;
+            button.disabled = false;
+        }
     }
 
     function localDate(date) {
@@ -140,20 +146,63 @@
         return localDate(date);
     }
 
+    function addOneMonth(value) {
+        const [year, month, day] = value.split('-').map(Number);
+        const targetMonthIndex = month;
+        const targetYear = year + Math.floor(targetMonthIndex / 12);
+        const targetMonth = targetMonthIndex % 12;
+        const lastDay = new Date(targetYear, targetMonth + 1, 0).getDate();
+        return localDate(new Date(targetYear, targetMonth, Math.min(day, lastDay)));
+    }
+
+    function updateEffectiveEndDate() {
+        const startDate = document.getElementById('effectiveFrom').value;
+        if (startDate) {
+            document.getElementById('effectiveTo').value = addOneMonth(startDate);
+        }
+    }
+
+    function setDefaultEndTime() {
+        const startInput = document.getElementById('startTime');
+        const endInput = document.getElementById('endTime');
+        if (!startInput.value) return;
+
+        const end = new Date(startInput.value);
+        end.setHours(end.getHours() + 1);
+        const year = end.getFullYear();
+        const month = String(end.getMonth() + 1).padStart(2, '0');
+        const day = String(end.getDate()).padStart(2, '0');
+        const hour = String(end.getHours()).padStart(2, '0');
+        const minute = String(end.getMinutes()).padStart(2, '0');
+        endInput.value = `${year}-${month}-${day}T${hour}:${minute}`;
+    }
+
     async function loadSchedules() {
-        const list = document.getElementById('scheduleList');
         try {
             const schedules = await request('/api/trainer/schedules');
-            list.innerHTML = schedules.length ? '' : '<p>등록한 일정이 없습니다.</p>';
-            schedules.forEach(schedule => {
-                const item = document.createElement('div');
-                item.className = 'schedule';
-                item.innerHTML = `<strong>#${schedule.id} ${schedule.startTime} ~ ${schedule.endTime}</strong>
-                    <p>정원 ${schedule.capacity}명 / 예약 ${schedule.reservedCount}명 / 상태 ${schedule.status}</p>
-                    <button class="danger" onclick="cancelSchedule(${schedule.id})">일정 취소</button>`;
-                list.appendChild(item);
-            });
-        } catch (e) { list.textContent = e.message; }
+            renderSchedules(schedules);
+        } catch (e) { document.getElementById('scheduleList').textContent = e.message; }
+    }
+
+    function statusLabel(status) {
+        const labels = {OPEN: '예약 가능', CANCELLED: '취소됨', COMPLETED: '수업 완료'};
+        return labels[status] || status;
+    }
+
+    function renderSchedules(schedules) {
+        const list = document.getElementById('scheduleList');
+        list.innerHTML = schedules.length ? '' : '<p>등록한 일정이 없습니다.</p>';
+        schedules.forEach(schedule => {
+            const cancelled = schedule.status === 'CANCELLED';
+            const item = document.createElement('div');
+            item.className = `schedule${cancelled ? ' cancelled' : ''}`;
+            item.innerHTML = `<strong>#${schedule.id} ${schedule.startTime} ~ ${schedule.endTime}</strong>
+                <p>정원 ${schedule.capacity}명 / 예약 ${schedule.reservedCount}명 / 상태 ${statusLabel(schedule.status)}</p>
+                ${cancelled
+                    ? `<button class="primary" onclick="restoreSchedule(${schedule.id})">일정 복원</button>`
+                    : `<button class="danger" onclick="cancelSchedule(${schedule.id})">일정 취소</button>`}`;
+            list.appendChild(item);
+        });
     }
 
     async function cancelSchedule(id) {
@@ -164,12 +213,48 @@
         } catch (e) { alert(e.message); }
     }
 
+    async function restoreSchedule(id) {
+        try {
+            await request(`/api/trainer/schedules/${id}/restore`, {method: 'PATCH'});
+            await loadSchedules();
+        } catch (e) { alert(e.message); }
+    }
+
+    let refreshingSchedules = false;
+
+    async function refreshSchedules() {
+        if (refreshingSchedules) return;
+        const confirmed = window.confirm(
+            '새로고침하면 취소된 일정이 목록에서 제거됩니다.\n' +
+            '예약 이력이 없는 취소 일정은 완전히 삭제되어 이후 복원할 수 없습니다.\n' +
+            '계속하시겠습니까?'
+        );
+        if (!confirmed) return;
+
+        const button = document.getElementById('refreshButton');
+        refreshingSchedules = true;
+        button.disabled = true;
+        button.textContent = '정리 중...';
+        try {
+            const result = await request('/api/trainer/schedules/refresh', {method: 'POST'});
+            renderSchedules(result.schedules);
+        } catch (e) {
+            alert(e.message);
+        } finally {
+            refreshingSchedules = false;
+            button.disabled = false;
+            button.textContent = '일정 새로고침';
+        }
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
         if (!getJwtToken()) location.href = '/login.html';
+        document.getElementById('startTime').addEventListener('change', setDefaultEndTime);
+        document.getElementById('effectiveFrom').addEventListener('change', updateEffectiveEndDate);
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
         document.getElementById('effectiveFrom').value = localDate(tomorrow);
-        document.getElementById('effectiveTo').value = addDays(localDate(tomorrow), 30);
+        updateEffectiveEndDate();
         loadSchedules();
     });
 </script>

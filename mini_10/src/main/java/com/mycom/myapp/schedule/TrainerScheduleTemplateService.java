@@ -3,15 +3,12 @@ package com.mycom.myapp.schedule;
 import com.mycom.myapp.common.ForbiddenOperationException;
 import com.mycom.myapp.common.InvalidOperationException;
 import com.mycom.myapp.common.ResourceNotFoundException;
-import com.mycom.myapp.user.entity.User;
-import com.mycom.myapp.user.repository.UserRepository;
-import com.mycom.myapp.schedule.dto.ScheduleGenerateRequest;
-import com.mycom.myapp.schedule.dto.ScheduleGenerationResponse;
 import com.mycom.myapp.schedule.dto.ScheduleTemplateCreateRequest;
 import com.mycom.myapp.schedule.dto.ScheduleTemplateResponse;
+import com.mycom.myapp.user.entity.User;
+import com.mycom.myapp.user.repository.UserRepository;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import org.springframework.stereotype.Service;
@@ -19,8 +16,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class TrainerScheduleTemplateService {
-
-    private static final long MAX_GENERATION_DAYS = 93;
 
     private final TrainerScheduleTemplateRepository templateRepository;
     private final TrainerScheduleRepository scheduleRepository;
@@ -40,24 +35,37 @@ public class TrainerScheduleTemplateService {
     public ScheduleTemplateResponse create(String trainerEmail, ScheduleTemplateCreateRequest request) {
         User trainer = findTrainer(trainerEmail);
         validateTemplate(request);
-        boolean overlaps = templateRepository
-                .existsByTrainerIdAndDayOfWeekAndStartTimeLessThanAndEndTimeGreaterThanAndActiveTrue(
-                        trainer.getId(), request.dayOfWeek(), request.endTime(), request.startTime());
-        if (overlaps) {
-            throw new InvalidOperationException("같은 요일과 시간대에 이미 반복 일정이 있습니다.");
+        LocalDate effectiveTo = request.effectiveTo() != null
+                ? request.effectiveTo()
+                : request.effectiveFrom().plusMonths(1);
+
+        long overlapCount = templateRepository.countOverlappingActiveTemplates(
+                trainer.getId(), request.dayOfWeek(), request.startTime(), request.endTime(),
+                request.effectiveFrom(), effectiveTo);
+        if (overlapCount > 0) {
+            throw new DuplicateRecurringScheduleException(
+                    "같은 요일과 시간대에 이미 반복 일정이 있습니다.");
         }
+
         TrainerScheduleTemplate template = new TrainerScheduleTemplate(
                 trainer, request.dayOfWeek(), request.startTime(), request.endTime(),
-                request.capacity(), request.effectiveFrom(), request.effectiveTo()
+                request.capacity(), request.effectiveFrom(), effectiveTo
         );
-        return ScheduleTemplateResponse.from(templateRepository.save(template));
+        TrainerScheduleTemplate savedTemplate = templateRepository.save(template);
+
+        List<TrainerSchedule> schedules = buildSchedules(
+                trainer, savedTemplate, request.effectiveFrom(), effectiveTo, true);
+        scheduleRepository.saveAll(schedules);
+        return ScheduleTemplateResponse.from(savedTemplate);
     }
 
     @Transactional(readOnly = true)
     public List<ScheduleTemplateResponse> findMine(String trainerEmail) {
         User trainer = findTrainer(trainerEmail);
         return templateRepository.findAllByTrainerIdOrderByDayOfWeekAscStartTimeAsc(trainer.getId())
-                .stream().map(ScheduleTemplateResponse::from).toList();
+                .stream()
+                .map(ScheduleTemplateResponse::from)
+                .toList();
     }
 
     @Transactional
@@ -68,35 +76,38 @@ public class TrainerScheduleTemplateService {
         return ScheduleTemplateResponse.from(template);
     }
 
-    @Transactional
-    public ScheduleGenerationResponse generate(String trainerEmail, ScheduleGenerateRequest request) {
-        User trainer = findTrainer(trainerEmail);
-        validateGenerationPeriod(request);
-        List<TrainerScheduleTemplate> templates =
-                templateRepository.findAllByTrainerIdAndActiveTrue(trainer.getId());
-        List<TrainerSchedule> created = new ArrayList<>();
-        int skipped = 0;
-
-        for (LocalDate date = request.startDate(); !date.isAfter(request.endDate()); date = date.plusDays(1)) {
-            for (TrainerScheduleTemplate template : templates) {
-                if (!template.appliesTo(date)) {
-                    continue;
-                }
-                LocalDateTime startAt = LocalDateTime.of(date, template.getStartTime());
-                LocalDateTime endAt = LocalDateTime.of(date, template.getEndTime());
-                boolean exists = scheduleRepository
-                        .existsByTrainerIdAndStartTimeLessThanAndEndTimeGreaterThan(
-                                trainer.getId(), endAt, startAt);
-                if (exists) {
-                    skipped++;
-                    continue;
-                }
-                created.add(new TrainerSchedule(
-                        trainer, template, startAt, endAt, template.getCapacity()));
+    private List<TrainerSchedule> buildSchedules(
+            User trainer,
+            TrainerScheduleTemplate template,
+            LocalDate startDate,
+            LocalDate endDate,
+            boolean failOnConflict
+    ) {
+        List<TrainerSchedule> schedules = new ArrayList<>();
+        for (LocalDate date = startDate; !date.isAfter(endDate); date = date.plusDays(1)) {
+            if (!template.appliesTo(date)) {
+                continue;
             }
+            LocalDateTime startAt = LocalDateTime.of(date, template.getStartTime());
+            LocalDateTime endAt = LocalDateTime.of(date, template.getEndTime());
+            boolean exactDuplicate = template.getId() != null && scheduleRepository
+                    .existsByTemplateIdAndStartTimeAndEndTime(template.getId(), startAt, endAt);
+            boolean timeConflict = scheduleRepository
+                    .existsByTrainerIdAndStatusNotAndStartTimeLessThanAndEndTimeGreaterThan(
+                            trainer.getId(), ScheduleStatus.CANCELLED, endAt, startAt);
+
+            if (exactDuplicate || timeConflict) {
+                if (failOnConflict) {
+                    throw new ScheduleConflictException(
+                            startAt.toLocalDate() + " " + template.getStartTime() + "~"
+                                    + template.getEndTime() + "에 겹치는 수업 일정이 있습니다.");
+                }
+                continue;
+            }
+            schedules.add(new TrainerSchedule(
+                    trainer, template, startAt, endAt, template.getCapacity()));
         }
-        scheduleRepository.saveAll(created);
-        return new ScheduleGenerationResponse(created.size(), skipped);
+        return schedules;
     }
 
     private void validateTemplate(ScheduleTemplateCreateRequest request) {
@@ -105,15 +116,6 @@ public class TrainerScheduleTemplateService {
         }
         if (request.effectiveTo() != null && request.effectiveTo().isBefore(request.effectiveFrom())) {
             throw new InvalidOperationException("적용 종료일은 시작일보다 빠를 수 없습니다.");
-        }
-    }
-
-    private void validateGenerationPeriod(ScheduleGenerateRequest request) {
-        if (request.endDate().isBefore(request.startDate())) {
-            throw new InvalidOperationException("생성 종료일은 시작일보다 빠를 수 없습니다.");
-        }
-        if (ChronoUnit.DAYS.between(request.startDate(), request.endDate()) + 1 > MAX_GENERATION_DAYS) {
-            throw new InvalidOperationException("일정은 한 번에 최대 93일까지만 생성할 수 있습니다.");
         }
     }
 

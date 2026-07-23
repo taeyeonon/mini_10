@@ -3,6 +3,7 @@ package com.mycom.myapp.reservation;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.when;
 
 import com.mycom.myapp.common.InvalidOperationException;
@@ -13,7 +14,7 @@ import com.mycom.myapp.reservation.service.ReservationService;
 import com.mycom.myapp.schedule.TrainerSchedule;
 import com.mycom.myapp.schedule.TrainerScheduleRepository;
 import com.mycom.myapp.ticket.entity.Ticket;
-import com.mycom.myapp.ticket.repository.TicketRepository;
+import com.mycom.myapp.ticket.service.TicketService;
 import com.mycom.myapp.user.entity.User;
 import com.mycom.myapp.user.repository.UserRepository;
 import java.time.LocalDate;
@@ -30,7 +31,7 @@ class ReservationServiceTest {
 
     @Mock ReservationRepository reservationRepository;
     @Mock TrainerScheduleRepository scheduleRepository;
-    @Mock TicketRepository ticketRepository;
+    @Mock TicketService ticketService;
     @Mock UserRepository userRepository;
 
     private ReservationService reservationService;
@@ -38,7 +39,7 @@ class ReservationServiceTest {
     @BeforeEach
     void setUp() {
         reservationService = new ReservationService(
-                reservationRepository, scheduleRepository, ticketRepository, userRepository);
+                reservationRepository, scheduleRepository, ticketService, userRepository);
     }
 
     @Test
@@ -82,6 +83,10 @@ class ReservationServiceTest {
         Reservation reservation = new Reservation(member, schedule, ticket);
         when(reservationRepository.findByIdAndMemberId(20L, 1L))
                 .thenReturn(Optional.of(reservation));
+        doAnswer(invocation -> {
+            invocation.<Ticket>getArgument(0).cancel();
+            return null;
+        }).when(ticketService).cancelTicket(ticket);
 
         reservationService.cancel(1L, 20L);
 
@@ -95,10 +100,10 @@ class ReservationServiceTest {
         when(scheduleRepository.findById(10L)).thenReturn(Optional.of(schedule));
         when(reservationRepository.findByMemberIdAndTrainerScheduleId(1L, 10L))
                 .thenReturn(Optional.empty());
-        when(ticketRepository
-                .findFirstByUserIdAndRemainingCountGreaterThanAndStartDateLessThanEqualAndEndDateGreaterThanEqualOrderByIdAsc(
-                        any(), any(), any(), any()))
-                .thenReturn(Optional.of(ticket));
+        when(ticketService.useTicketAndGet(1L)).thenAnswer(invocation -> {
+            ticket.use();
+            return ticket;
+        });
     }
 
     private User user(String email) {

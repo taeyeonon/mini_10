@@ -1,6 +1,7 @@
 package com.mycom.myapp.schedule;
 
 import com.mycom.myapp.schedule.dto.ScheduleCreateRequest;
+import com.mycom.myapp.schedule.dto.ScheduleRefreshResponse;
 import com.mycom.myapp.schedule.dto.ScheduleResponse;
 import com.mycom.myapp.schedule.dto.ScheduleUpdateRequest;
 import com.mycom.myapp.config.MyUserDetails;
@@ -59,5 +60,20 @@ public class TrainerScheduleController {
             @PathVariable Long scheduleId
     ) {
         return scheduleService.cancel(userDetails.getEmail(), scheduleId);
+    }
+
+    @PatchMapping("/{scheduleId}/restore")
+    public ScheduleResponse restore(
+            @AuthenticationPrincipal MyUserDetails userDetails,
+            @PathVariable Long scheduleId
+    ) {
+        return scheduleService.restore(userDetails.getEmail(), scheduleId);
+    }
+
+    @PostMapping("/refresh")
+    public ScheduleRefreshResponse refresh(
+            @AuthenticationPrincipal MyUserDetails userDetails
+    ) {
+        return scheduleService.refresh(userDetails.getEmail());
     }
 }

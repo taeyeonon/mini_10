@@ -3,16 +3,15 @@ package com.mycom.myapp.schedule;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.mycom.myapp.common.InvalidOperationException;
-import com.mycom.myapp.user.entity.User;
-import com.mycom.myapp.user.repository.UserRepository;
-import com.mycom.myapp.user.entity.UserRole;
-import com.mycom.myapp.schedule.dto.ScheduleGenerateRequest;
-import com.mycom.myapp.schedule.dto.ScheduleGenerationResponse;
 import com.mycom.myapp.schedule.dto.ScheduleTemplateCreateRequest;
+import com.mycom.myapp.schedule.dto.ScheduleTemplateResponse;
+import com.mycom.myapp.user.entity.User;
+import com.mycom.myapp.user.entity.UserRole;
+import com.mycom.myapp.user.repository.UserRepository;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -30,10 +29,8 @@ class TrainerScheduleTemplateServiceTest {
 
     @Mock
     private TrainerScheduleTemplateRepository templateRepository;
-
     @Mock
     private TrainerScheduleRepository scheduleRepository;
-
     @Mock
     private UserRepository memberRepository;
 
@@ -46,96 +43,127 @@ class TrainerScheduleTemplateServiceTest {
     }
 
     @Test
-    void createRejectsOverlappingTemplate() {
-        User trainer = trainer();
-        when(memberRepository.findByEmail("trainer@example.com")).thenReturn(Optional.of(trainer));
-        when(templateRepository
-                .existsByTrainerIdAndDayOfWeekAndStartTimeLessThanAndEndTimeGreaterThanAndActiveTrue(
-                        trainer.getId(), DayOfWeek.MONDAY,
-                        LocalTime.of(11, 0), LocalTime.of(10, 0)))
-                .thenReturn(true);
-
-        ScheduleTemplateCreateRequest request = new ScheduleTemplateCreateRequest(
-                DayOfWeek.MONDAY,
-                LocalTime.of(10, 0),
-                LocalTime.of(11, 0),
-                10,
-                LocalDate.of(2026, 7, 1),
-                null
-        );
-
-        assertThatThrownBy(() -> templateService.create("trainer@example.com", request))
-                .isInstanceOf(InvalidOperationException.class)
-                .hasMessage("같은 요일과 시간대에 이미 반복 일정이 있습니다.");
-    }
-
-    @Test
-    void generateCreatesEveryMatchingWeekday() {
-        User trainer = trainer();
-        TrainerScheduleTemplate template = mondayTemplate(trainer);
-        when(memberRepository.findByEmail("trainer@example.com")).thenReturn(Optional.of(trainer));
-        when(templateRepository.findAllByTrainerIdAndActiveTrue(trainer.getId()))
-                .thenReturn(List.of(template));
-        when(scheduleRepository
-                .existsByTrainerIdAndStartTimeLessThanAndEndTimeGreaterThan(any(), any(), any()))
-                .thenReturn(false);
-
-        ScheduleGenerationResponse response = templateService.generate(
-                "trainer@example.com",
-                new ScheduleGenerateRequest(
-                        LocalDate.of(2026, 7, 1), LocalDate.of(2026, 7, 31))
-        );
+    void firstTemplateCreatesEveryMatchingClassDate() {
+        mockTrainerAndTemplateSave(trainer(1L, "trainer@example.com"));
+        ScheduleTemplateResponse response = templateService.create(
+                "trainer@example.com", request(
+                        LocalTime.of(10, 0), LocalTime.of(11, 0),
+                        LocalDate.of(2027, 1, 26), LocalDate.of(2027, 2, 24)));
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<TrainerSchedule>> captor = ArgumentCaptor.forClass(List.class);
         verify(scheduleRepository).saveAll(captor.capture());
+        assertThat(response.active()).isTrue();
         assertThat(captor.getValue()).hasSize(4);
-        assertThat(response.createdCount()).isEqualTo(4);
-        assertThat(response.skippedCount()).isZero();
+        assertThat(captor.getValue()).extracting(TrainerSchedule::getStartTime)
+                .extracting(java.time.LocalDateTime::toLocalDate)
+                .containsExactly(
+                        LocalDate.of(2027, 2, 1), LocalDate.of(2027, 2, 8),
+                        LocalDate.of(2027, 2, 15), LocalDate.of(2027, 2, 22));
     }
 
     @Test
-    void generateSkipsExistingSchedule() {
-        User trainer = trainer();
-        TrainerScheduleTemplate template = mondayTemplate(trainer);
-        when(memberRepository.findByEmail("trainer@example.com")).thenReturn(Optional.of(trainer));
-        when(templateRepository.findAllByTrainerIdAndActiveTrue(trainer.getId()))
-                .thenReturn(List.of(template));
-        when(scheduleRepository
-                .existsByTrainerIdAndStartTimeLessThanAndEndTimeGreaterThan(any(), any(), any()))
-                .thenReturn(true);
+    void overlappingTemplateIsRejectedBeforeSave() {
+        User trainer = trainer(1L, "trainer@example.com");
+        when(memberRepository.findByEmail(trainer.getEmail())).thenReturn(Optional.of(trainer));
+        when(templateRepository.countOverlappingActiveTemplates(
+                trainer.getId(), DayOfWeek.MONDAY,
+                LocalTime.of(10, 0), LocalTime.of(11, 0),
+                LocalDate.of(2027, 1, 26), LocalDate.of(2027, 2, 24)))
+                .thenReturn(1L);
 
-        ScheduleGenerationResponse response = templateService.generate(
-                "trainer@example.com",
-                new ScheduleGenerateRequest(
-                        LocalDate.of(2026, 7, 6), LocalDate.of(2026, 7, 6))
-        );
-
-        assertThat(response.createdCount()).isZero();
-        assertThat(response.skippedCount()).isEqualTo(1);
+        assertThatThrownBy(() -> templateService.create(trainer.getEmail(), request(
+                LocalTime.of(10, 0), LocalTime.of(11, 0),
+                LocalDate.of(2027, 1, 26), LocalDate.of(2027, 2, 24))))
+                .isInstanceOf(DuplicateRecurringScheduleException.class)
+                .hasMessage("같은 요일과 시간대에 이미 반복 일정이 있습니다.");
+        verify(templateRepository, never()).save(any());
     }
 
-    private User trainer() {
+    @Test
+    void adjacentTimeRangeIsAccepted() {
+        User trainer = trainer(1L, "trainer@example.com");
+        mockTrainerAndTemplateSave(trainer);
+
+        templateService.create(trainer.getEmail(), request(
+                LocalTime.of(11, 0), LocalTime.of(12, 0),
+                LocalDate.of(2027, 1, 26), LocalDate.of(2027, 2, 24)));
+
+        verify(templateRepository).countOverlappingActiveTemplates(
+                trainer.getId(), DayOfWeek.MONDAY,
+                LocalTime.of(11, 0), LocalTime.of(12, 0),
+                LocalDate.of(2027, 1, 26), LocalDate.of(2027, 2, 24));
+        verify(templateRepository).save(any());
+    }
+
+    @Test
+    void nonOverlappingPeriodIsAccepted() {
+        User trainer = trainer(1L, "trainer@example.com");
+        mockTrainerAndTemplateSave(trainer);
+
+        templateService.create(trainer.getEmail(), request(
+                LocalTime.of(10, 0), LocalTime.of(11, 0),
+                LocalDate.of(2027, 3, 1), LocalDate.of(2027, 3, 31)));
+
+        verify(templateRepository).countOverlappingActiveTemplates(
+                trainer.getId(), DayOfWeek.MONDAY,
+                LocalTime.of(10, 0), LocalTime.of(11, 0),
+                LocalDate.of(2027, 3, 1), LocalDate.of(2027, 3, 31));
+        verify(templateRepository).save(any());
+    }
+
+    @Test
+    void sameSlotForAnotherTrainerIsAccepted() {
+        User anotherTrainer = trainer(2L, "other@example.com");
+        mockTrainerAndTemplateSave(anotherTrainer);
+
+        templateService.create(anotherTrainer.getEmail(), request(
+                LocalTime.of(10, 0), LocalTime.of(11, 0),
+                LocalDate.of(2027, 1, 26), LocalDate.of(2027, 2, 24)));
+
+        verify(templateRepository).countOverlappingActiveTemplates(
+                anotherTrainer.getId(), DayOfWeek.MONDAY,
+                LocalTime.of(10, 0), LocalTime.of(11, 0),
+                LocalDate.of(2027, 1, 26), LocalDate.of(2027, 2, 24));
+        verify(templateRepository).save(any());
+    }
+
+    @Test
+    void createUsesOneMonthLaterWhenEndDateIsOmitted() {
+        User trainer = trainer(1L, "trainer@example.com");
+        mockTrainerAndTemplateSave(trainer);
+
+        ScheduleTemplateResponse response = templateService.create(trainer.getEmail(), request(
+                LocalTime.of(10, 0), LocalTime.of(11, 0),
+                LocalDate.of(2027, 1, 31), null));
+
+        assertThat(response.effectiveTo()).isEqualTo(LocalDate.of(2027, 2, 28));
+    }
+
+    private void mockTrainerAndTemplateSave(User trainer) {
+        when(memberRepository.findByEmail(trainer.getEmail())).thenReturn(Optional.of(trainer));
+        when(templateRepository.save(any(TrainerScheduleTemplate.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+    }
+
+    private ScheduleTemplateCreateRequest request(
+            LocalTime startTime, LocalTime endTime,
+            LocalDate effectiveFrom, LocalDate effectiveTo
+    ) {
+        return new ScheduleTemplateCreateRequest(
+                DayOfWeek.MONDAY, startTime, endTime, 10, effectiveFrom, effectiveTo);
+    }
+
+    private User trainer(Long id, String email) {
         UserRole role = new UserRole();
         role.setName("TRAINER");
         return User.builder()
-                .email("trainer@example.com")
+                .id(id)
+                .email(email)
                 .password("encoded")
-                .name("?몃젅?대꼫")
+                .name("트레이너")
                 .userRoles(List.of(role))
                 .build();
     }
 
-    private TrainerScheduleTemplate mondayTemplate(User trainer) {
-        return new TrainerScheduleTemplate(
-                trainer,
-                DayOfWeek.MONDAY,
-                LocalTime.of(10, 0),
-                LocalTime.of(11, 0),
-                10,
-                LocalDate.of(2026, 7, 1),
-                null
-        );
-    }
 }
-

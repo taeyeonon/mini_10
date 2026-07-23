@@ -6,8 +6,10 @@ import com.mycom.myapp.common.ResourceNotFoundException;
 import com.mycom.myapp.user.entity.User;
 import com.mycom.myapp.user.repository.UserRepository;
 import com.mycom.myapp.schedule.dto.ScheduleCreateRequest;
+import com.mycom.myapp.schedule.dto.ScheduleRefreshResponse;
 import com.mycom.myapp.schedule.dto.ScheduleResponse;
 import com.mycom.myapp.schedule.dto.ScheduleUpdateRequest;
+import com.mycom.myapp.reservation.repository.ReservationRepository;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.springframework.stereotype.Service;
@@ -18,13 +20,16 @@ public class TrainerScheduleService {
 
     private final TrainerScheduleRepository scheduleRepository;
     private final UserRepository userRepository;
+    private final ReservationRepository reservationRepository;
 
     public TrainerScheduleService(
             TrainerScheduleRepository scheduleRepository,
-            UserRepository userRepository
+            UserRepository userRepository,
+            ReservationRepository reservationRepository
     ) {
         this.scheduleRepository = scheduleRepository;
         this.userRepository = userRepository;
+        this.reservationRepository = reservationRepository;
     }
 
     @Transactional
@@ -42,7 +47,7 @@ public class TrainerScheduleService {
     @Transactional(readOnly = true)
     public List<ScheduleResponse> findMine(String trainerEmail) {
         User trainer = findTrainer(trainerEmail);
-        return scheduleRepository.findAllByTrainerIdOrderByStartTimeAsc(trainer.getId()).stream()
+        return scheduleRepository.findAllByTrainerIdAndArchivedFalseOrderByStartTimeAsc(trainer.getId()).stream()
                 .map(ScheduleResponse::from)
                 .toList();
     }
@@ -86,8 +91,57 @@ public class TrainerScheduleService {
         if (schedule.getStatus() == ScheduleStatus.COMPLETED) {
             throw new InvalidOperationException("완료된 일정은 취소할 수 없습니다.");
         }
+        if (schedule.getStatus() == ScheduleStatus.CANCELLED) {
+            throw new InvalidOperationException("이미 취소된 일정입니다.");
+        }
+        if (schedule.getReservedCount() > 0
+                || reservationRepository.existsByTrainerScheduleId(schedule.getId())) {
+            throw new InvalidOperationException(
+                    "예약자가 있는 일정은 수강권 복구 정책이 필요하므로 취소할 수 없습니다.");
+        }
         schedule.cancel();
         return ScheduleResponse.from(schedule);
+    }
+
+    @Transactional
+    public ScheduleResponse restore(String trainerEmail, Long scheduleId) {
+        User trainer = findTrainer(trainerEmail);
+        TrainerSchedule schedule = findOwnedSchedule(scheduleId, trainer.getId());
+        if (schedule.getStatus() != ScheduleStatus.CANCELLED) {
+            throw new InvalidOperationException("취소된 일정만 복원할 수 있습니다.");
+        }
+        ensureNoOverlap(
+                trainer.getId(), scheduleId, schedule.getStartTime(), schedule.getEndTime());
+        schedule.restore();
+        return ScheduleResponse.from(schedule);
+    }
+
+    @Transactional
+    public ScheduleRefreshResponse refresh(String trainerEmail) {
+        User trainer = findTrainer(trainerEmail);
+        List<TrainerSchedule> cancelled = scheduleRepository
+                .findAllByTrainerIdAndStatusAndArchivedFalse(
+                        trainer.getId(), ScheduleStatus.CANCELLED);
+        int deletedCount = 0;
+        int archivedCount = 0;
+
+        for (TrainerSchedule schedule : cancelled) {
+            boolean hasReservationHistory = schedule.getReservedCount() > 0
+                    || reservationRepository.existsByTrainerScheduleId(schedule.getId());
+            if (hasReservationHistory) {
+                schedule.archive();
+                archivedCount++;
+            } else {
+                scheduleRepository.delete(schedule);
+                deletedCount++;
+            }
+        }
+
+        List<ScheduleResponse> schedules = scheduleRepository
+                .findAllByTrainerIdAndArchivedFalseOrderByStartTimeAsc(trainer.getId()).stream()
+                .map(ScheduleResponse::from)
+                .toList();
+        return new ScheduleRefreshResponse(deletedCount, archivedCount, schedules);
     }
 
     private User findTrainer(String email) {
@@ -124,10 +178,12 @@ public class TrainerScheduleService {
             Long trainerId, Long scheduleId, LocalDateTime startTime, LocalDateTime endTime
     ) {
         boolean overlaps = scheduleId == null
-                ? scheduleRepository.existsByTrainerIdAndStartTimeLessThanAndEndTimeGreaterThan(
-                        trainerId, endTime, startTime)
-                : scheduleRepository.existsByTrainerIdAndStartTimeLessThanAndEndTimeGreaterThanAndIdNot(
-                        trainerId, endTime, startTime, scheduleId);
+                ? scheduleRepository
+                        .existsByTrainerIdAndStatusNotAndStartTimeLessThanAndEndTimeGreaterThan(
+                                trainerId, ScheduleStatus.CANCELLED, endTime, startTime)
+                : scheduleRepository
+                        .existsByTrainerIdAndStatusNotAndStartTimeLessThanAndEndTimeGreaterThanAndIdNot(
+                                trainerId, ScheduleStatus.CANCELLED, endTime, startTime, scheduleId);
         if (overlaps) {
             throw new InvalidOperationException("같은 시간대에 이미 등록된 수업이 있습니다.");
         }

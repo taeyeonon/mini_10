@@ -12,11 +12,18 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import jakarta.persistence.Version;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "trainer_schedule")
+@Table(
+        name = "trainer_schedule",
+        uniqueConstraints = @UniqueConstraint(
+                name = "uk_schedule_template_time",
+                columnNames = {"template_id", "start_time", "end_time"}
+        )
+)
 public class TrainerSchedule {
 
     @Id
@@ -42,6 +49,9 @@ public class TrainerSchedule {
 
     @Column(nullable = false)
     private int reservedCount;
+
+    @Column(nullable = false)
+    private boolean archived;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
@@ -70,6 +80,7 @@ public class TrainerSchedule {
         this.endTime = endTime;
         this.capacity = capacity;
         this.reservedCount = 0;
+        this.archived = false;
         this.status = ScheduleStatus.OPEN;
     }
 
@@ -81,6 +92,15 @@ public class TrainerSchedule {
 
     public void cancel() {
         this.status = ScheduleStatus.CANCELLED;
+    }
+
+    public void restore() {
+        this.status = ScheduleStatus.OPEN;
+        this.archived = false;
+    }
+
+    public void archive() {
+        this.archived = true;
     }
 
     public void increaseReservedCount() {
@@ -112,4 +132,5 @@ public class TrainerSchedule {
     public int getCapacity() { return capacity; }
     public int getReservedCount() { return reservedCount; }
     public ScheduleStatus getStatus() { return status; }
+    public boolean isArchived() { return archived; }
 }

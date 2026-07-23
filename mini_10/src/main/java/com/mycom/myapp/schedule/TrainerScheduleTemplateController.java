@@ -1,7 +1,5 @@
 package com.mycom.myapp.schedule;
 
-import com.mycom.myapp.schedule.dto.ScheduleGenerateRequest;
-import com.mycom.myapp.schedule.dto.ScheduleGenerationResponse;
 import com.mycom.myapp.schedule.dto.ScheduleTemplateCreateRequest;
 import com.mycom.myapp.schedule.dto.ScheduleTemplateResponse;
 import com.mycom.myapp.config.MyUserDetails;
@@ -53,11 +51,4 @@ public class TrainerScheduleTemplateController {
         return templateService.deactivate(userDetails.getEmail(), templateId);
     }
 
-    @PostMapping("/generate")
-    public ScheduleGenerationResponse generate(
-            @AuthenticationPrincipal MyUserDetails userDetails,
-            @Valid @RequestBody ScheduleGenerateRequest request
-    ) {
-        return templateService.generate(userDetails.getEmail(), request);
-    }
 }

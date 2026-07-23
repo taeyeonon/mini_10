@@ -6,19 +6,27 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface TrainerScheduleRepository extends JpaRepository<TrainerSchedule, Long> {
 
-    List<TrainerSchedule> findAllByTrainerIdOrderByStartTimeAsc(Long trainerId);
+    List<TrainerSchedule> findAllByTrainerIdAndArchivedFalseOrderByStartTimeAsc(Long trainerId);
+
+    List<TrainerSchedule> findAllByTrainerIdAndStatusAndArchivedFalse(
+            Long trainerId, ScheduleStatus status
+    );
 
     List<TrainerSchedule> findAllByStatusAndStartTimeAfterOrderByStartTimeAsc(
             ScheduleStatus status, LocalDateTime startTime
     );
 
-    boolean existsByTrainerIdAndStartTimeLessThanAndEndTimeGreaterThan(
-            Long trainerId, LocalDateTime endTime, LocalDateTime startTime
+    boolean existsByTrainerIdAndStatusNotAndStartTimeLessThanAndEndTimeGreaterThan(
+            Long trainerId, ScheduleStatus status,
+            LocalDateTime endTime, LocalDateTime startTime
     );
 
-    boolean existsByTrainerIdAndStartTimeLessThanAndEndTimeGreaterThanAndIdNot(
-            Long trainerId, LocalDateTime endTime, LocalDateTime startTime, Long id
+    boolean existsByTrainerIdAndStatusNotAndStartTimeLessThanAndEndTimeGreaterThanAndIdNot(
+            Long trainerId, ScheduleStatus status,
+            LocalDateTime endTime, LocalDateTime startTime, Long id
     );
 
-    boolean existsByTrainerIdAndStartTime(Long trainerId, LocalDateTime startTime);
+    boolean existsByTemplateIdAndStartTimeAndEndTime(
+            Long templateId, LocalDateTime startTime, LocalDateTime endTime
+    );
 }

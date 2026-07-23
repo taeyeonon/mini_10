@@ -9,6 +9,8 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
 
     Optional<Reservation> findByMemberIdAndTrainerScheduleId(Long memberId, Long trainerScheduleId);
 
+    boolean existsByTrainerScheduleId(Long trainerScheduleId);
+
     Optional<Reservation> findByIdAndMemberId(Long reservationId, Long memberId);
 
     List<Reservation> findAllByMemberIdOrderByReservedAtDesc(Long memberId);
