@@ -79,6 +79,9 @@ public class ReservationService {
         if (reservation.getStatus() == ReservationStatus.CANCELLED) {
             throw new InvalidOperationException("이미 취소된 예약입니다.");
         }
+        if (!reservation.getTrainerSchedule().getStartTime().isAfter(LocalDateTime.now())) {
+        		throw new InvalidOperationException("이미 시작된 수업은 취소할 수 없습니다.");
+        }
 
         ticketService.cancelTicket(reservation.getTicket());
         
