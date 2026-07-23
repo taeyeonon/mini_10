@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>회원 수업 예약</title>
+    <style>
+        body { font-family: sans-serif; padding: 36px; background: #f7f8fa; }
+        .header { display: flex; justify-content: space-between; align-items: center; max-width: 780px; }
+        .header-actions { display: flex; align-items: center; gap: 9px; }
+        .current-user { color: #495057; font-size: 14px; font-weight: bold; }
+        .card { max-width: 740px; margin: 18px 0; padding: 22px; border: 1px solid #ddd; border-radius: 9px; background: white; }
+        button { padding: 9px 15px; border: 0; border-radius: 5px; cursor: pointer; }
+        .primary { background: #198754; color: white; }
+        .secondary { background: #6c757d; color: white; }
+        .danger { background: #dc3545; color: white; }
+        .item { padding: 14px; margin-top: 10px; border: 1px solid #ddd; border-radius: 7px; background: #fafafa; }
+        .item p { margin: 6px 0; }
+        .muted { color: #6c757d; font-size: 14px; }
+        .error { color: #dc3545; white-space: pre-wrap; }
+        select { padding: 9px; border: 1px solid #bbb; border-radius: 5px; margin-right: 8px; }
+    </style>
+</head>
+<body>
+<div class="header">
+    <h2>회원 수업 예약</h2>
+    <div class="header-actions">
+        <span class="current-user"></span>
+        <button class="secondary" onclick="location.href='/board.html'">메인으로</button>
+        <button class="danger" onclick="jwtLogout()">로그아웃</button>
+    </div>
+</div>
+
+<div class="card">
+    <h3>수강권 구매</h3>
+    <p class="muted">테스트 가격 1회당 100원 · 결제 승인 완료 후 수강권이 자동 지급됩니다.</p>
+    <select id="purchaseCount" onchange="updatePurchasePrice()">
+        <option value="1">1회권</option>
+        <option value="5">5회권</option>
+        <option value="10" selected>10회권</option>
+    </select>
+    <button id="paymentButton" class="primary" onclick="purchaseTicket()">1,000원 결제하기</button>
+    <p id="paymentMessage" class="error"></p>
+</div>
+
+<div class="card">
+    <h3>내 수강권</h3>
+    <p class="muted">예약하면 사용 가능한 수강권이 자동으로 1회 차감됩니다.</p>
+    <button class="primary" onclick="loadTickets()">수강권 새로고침</button>
+    <div id="ticketList"></div>
+    <p id="ticketError" class="error"></p>
+</div>
+
+<div class="card">
+    <h3>예약 가능한 수업</h3>
+    <button class="primary" onclick="loadSchedules()">수업 새로고침</button>
+    <div id="scheduleList"></div>
+    <p id="scheduleError" class="error"></p>
+</div>
+
+<div class="card">
+    <h3>내 예약 내역</h3>
+    <button class="primary" onclick="loadReservations()">예약 새로고침</button>
+    <div id="reservationList"></div>
+    <p id="reservationError" class="error"></p>
+</div>
+
+<script src="https://js.tosspayments.com/v2/standard"></script>
+<script src="/assets/js/common.js"></script>
+<script>
+    async function request(url, options = {}) {
+        const response = await jwtFetch(url, options);
+        if (response.status === 401) {
+            alert('로그인이 필요합니다.');
+            location.href = '/login.html';
+            throw new Error('로그인 필요');
+        }
+        const text = await response.text();
+        let data = null;
+        if (text) {
+            try { data = JSON.parse(text); } catch (_) { data = text; }
+        }
+        if (!response.ok) {
+            throw new Error(data?.message || data || `요청 실패 (${response.status})`);
+        }
+        return data;
+    }
+
+    async function loadTickets() {
+        const list = document.getElementById('ticketList');
+        const error = document.getElementById('ticketError');
+        error.textContent = '';
+        try {
+            const tickets = await request('/customer/tickets/me');
+            list.innerHTML = tickets.length ? '' : '<p class="muted">보유한 수강권이 없습니다.</p>';
+            tickets.forEach(ticket => {
+                const item = document.createElement('div');
+                item.className = 'item';
+                item.innerHTML = `<strong>수강권 #${ticket.ticketId ?? ticket.id}</strong>
+                    <p>잔여 횟수: ${ticket.remainingCount} / ${ticket.totalCount}</p>
+                    <p>사용 기간: ${ticket.startDate} ~ ${ticket.endDate}</p>`;
+                list.appendChild(item);
+            });
+        } catch (e) { error.textContent = e.message; }
+    }
+
+    function updatePurchasePrice() {
+        const count = Number(document.getElementById('purchaseCount').value);
+        document.getElementById('paymentButton').textContent =
+            `${(count * 100).toLocaleString()}원 결제하기`;
+    }
+
+    async function purchaseTicket() {
+        const count = Number(document.getElementById('purchaseCount').value);
+        const button = document.getElementById('paymentButton');
+        button.disabled = true;
+        try {
+            const order = await request('/customer/payments/orders', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ticketCount: count})
+            });
+            const tossPayments = TossPayments(order.clientKey);
+            const payment = tossPayments.payment({customerKey: order.customerKey});
+            await payment.requestPayment({
+                method: 'CARD',
+                amount: {currency: 'KRW', value: order.amount},
+                orderId: order.orderId,
+                orderName: order.orderName,
+                customerName: order.customerName,
+                customerEmail: order.customerEmail,
+                successUrl: `${location.origin}/customer.html?payment=success`,
+                failUrl: `${location.origin}/customer.html?payment=fail`
+            });
+        } catch (e) {
+            document.getElementById('paymentMessage').textContent = e.message;
+            button.disabled = false;
+        }
+    }
+
+    async function handlePaymentResult() {
+        const params = new URLSearchParams(location.search);
+        if (params.get('payment') === 'success') {
+            try {
+                const result = await request('/customer/payments/confirm', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        paymentKey: params.get('paymentKey'),
+                        orderId: params.get('orderId'),
+                        amount: Number(params.get('amount'))
+                    })
+                });
+                alert(`${result.ticketCount}회 수강권 구매가 완료되었습니다.`);
+                history.replaceState({}, '', '/customer.html');
+                await loadTickets();
+            } catch (e) {
+                document.getElementById('paymentMessage').textContent = e.message;
+            }
+        } else if (params.get('payment') === 'fail') {
+            document.getElementById('paymentMessage').textContent =
+                params.get('message') || '결제가 취소되거나 실패했습니다.';
+            history.replaceState({}, '', '/customer.html');
+        }
+    }
+
+    async function loadSchedules() {
+        const list = document.getElementById('scheduleList');
+        const error = document.getElementById('scheduleError');
+        error.textContent = '';
+        try {
+            const schedules = await request('/api/schedules');
+            list.innerHTML = schedules.length ? '' : '<p class="muted">예약 가능한 수업이 없습니다.</p>';
+            schedules.forEach(schedule => {
+                const item = document.createElement('div');
+                item.className = 'item';
+                const disabled = schedule.full || schedule.status !== 'OPEN';
+                item.innerHTML = `<strong>${schedule.trainerName} 트레이너</strong>
+                    <p>${formatDateTime(schedule.startTime)} ~ ${formatDateTime(schedule.endTime)}</p>
+                    <p>예약 ${schedule.reservedCount} / 정원 ${schedule.capacity} · 잔여 ${schedule.availableCount}명</p>
+                    <button class="primary" ${disabled ? 'disabled' : ''}
+                        onclick="reserve(${schedule.id})">${disabled ? '예약 불가' : '예약하기'}</button>`;
+                list.appendChild(item);
+            });
+        } catch (e) { error.textContent = e.message; }
+    }
+
+    async function reserve(scheduleId) {
+        if (!confirm('이 수업을 예약할까요? 수강권이 1회 차감됩니다.')) return;
+        try {
+            await request(`/customer/reservations/schedules/${scheduleId}`, {method: 'POST'});
+            alert('예약이 완료되었습니다.');
+            await Promise.all([loadTickets(), loadSchedules(), loadReservations()]);
+        } catch (e) { alert(e.message); }
+    }
+
+    async function loadReservations() {
+        const list = document.getElementById('reservationList');
+        const error = document.getElementById('reservationError');
+        error.textContent = '';
+        try {
+            const reservations = await request('/customer/reservations/me');
+            list.innerHTML = reservations.length ? '' : '<p class="muted">예약 내역이 없습니다.</p>';
+            reservations.forEach(reservation => {
+                const item = document.createElement('div');
+                item.className = 'item';
+                item.innerHTML = `<strong>예약 #${reservation.id}</strong>
+                    <p>수업 ID: ${reservation.trainerScheduleId} · 수강권 ID: ${reservation.ticketId}</p>
+                    <p>예약 시각: ${formatDateTime(reservation.reservedAt)} · 상태: ${reservation.status}</p>
+                    ${reservation.status === 'CONFIRMED'
+                        ? `<button class="danger" onclick="cancelReservation(${reservation.id})">예약 취소</button>` : ''}`;
+                list.appendChild(item);
+            });
+        } catch (e) { error.textContent = e.message; }
+    }
+
+    async function cancelReservation(reservationId) {
+        if (!confirm('예약을 취소할까요? 수강권이 복구됩니다.')) return;
+        try {
+            await request(`/customer/reservations/${reservationId}/cancel`, {method: 'PATCH'});
+            alert('예약이 취소되었습니다.');
+            await Promise.all([loadTickets(), loadSchedules(), loadReservations()]);
+        } catch (e) { alert(e.message); }
+    }
+
+    function formatDateTime(value) {
+        return value ? value.replace('T', ' ').slice(0, 16) : '-';
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+            if (!getJwtToken()) {
+                location.href = '/login.html';
+                return;
+            }
+            renderCurrentUser();
+        handlePaymentResult();
+        Promise.all([loadTickets(), loadSchedules(), loadReservations()]);
+    });
+</script>
+</body>
+</html>

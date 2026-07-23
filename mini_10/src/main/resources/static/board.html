@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>메인 게시판 - 통합 대시보드</title>
+    <style>
+        body { font-family: sans-serif; padding: 40px; }
+        .header-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; width: 500px; }
+        .logout-btn { background-color: #dc3545; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; }
+        .user-actions { display: flex; align-items: center; gap: 10px; }
+        .current-user { color: #495057; font-size: 14px; font-weight: bold; }
+        .card { border: 1px solid #ddd; padding: 24px; border-radius: 8px; width: 450px; background-color: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .nav-group { display: flex; flex-direction: column; gap: 12px; margin-top: 20px; }
+        .nav-btn { width: 100%; padding: 14px; font-size: 15px; font-weight: bold; text-align: left; border: 1px solid #ccc; border-radius: 6px; cursor: pointer; background-color: #f8f9fa; transition: all 0.2s; }
+        .nav-btn:hover { background-color: #e9ecef; }
+        .btn-customer { border-left: 5px solid #198754; }
+        .btn-trainer { border-left: 5px solid #ffc107; }
+        .btn-admin { border-left: 5px solid #0d6efd; }
+    </style>
+</head>
+<body>
+
+    <div class="header-bar">
+        <h2>📌 메인 게시판</h2>
+        <div class="user-actions">
+            <span class="current-user"></span>
+            <button class="logout-btn" onclick="jwtLogout()">로그아웃</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3>🚀 이동할 페이지를 선택하세요</h3>
+        <p style="font-size: 13px; color: #6c757d;">보유하신 권한에 맞는 전용 페이지로 이동합니다.</p>
+        
+        <div class="nav-group">
+            <button id="customerPageBtn" class="nav-btn btn-customer" onclick="navigatePage('/customer.html')">
+                🙋‍♂️ 사용자(회원) 페이지
+            </button>
+            <button id="trainerPageBtn" class="nav-btn btn-trainer" onclick="navigatePage('/trainer.html')">
+                🏋️ 트레이너 페이지
+            </button>
+            <button id="adminPageBtn" class="nav-btn btn-admin" onclick="navigatePage('/admin.html')">
+                ⚙️ 관리자 페이지
+            </button>
+        </div>
+    </div>
+
+    <script src="/assets/js/common.js"></script>
+    <script>
+        let userRoles = [];
+
+        document.addEventListener("DOMContentLoaded", () => {
+            const token = getJwtToken();
+            if (!token) {
+                alert("로그인이 필요합니다.");
+                window.location.href = "/login.html";
+                return;
+            }
+
+            try {
+                const payload = getJwtPayload();
+                userRoles = payload.roles || payload.auth || [];
+                renderCurrentUser();
+            } catch (e) {
+                console.error("토큰 파싱 실패:", e);
+            }
+        });
+
+        // 페이지 이동 제어 함수
+        function navigatePage(url) {
+            // 필요에 따라 프론트엔드 차원에서 1차 권한 체크
+            if (url === '/admin.html' && !(userRoles.includes("ROLE_ADMIN") || userRoles.includes("ADMIN"))) {
+                alert("❌ 관리자 권한이 없습니다.");
+                return;
+            }
+            if (url === '/trainer.html' && !(userRoles.includes("ROLE_TRAINER") || userRoles.includes("TRAINER") || userRoles.includes("ROLE_ADMIN") || userRoles.includes("ADMIN"))) {
+                alert("❌ 트레이너 권한이 없습니다.");
+                return;
+            }
+            
+            window.location.href = url;
+        }
+    </script>
+</body>
+</html>
