@@ -30,6 +30,7 @@ public class DataInitializer implements ApplicationRunner {
 
         createUserIfAbsent("admin@test.com", "Admin User", "admin1234", "ADMIN");
         createUserIfAbsent("trainer@test.com", "Trainer User", "trainer1234", "TRAINER");
+        createUserIfAbsent("customer@test.com", "Customer User", "customer1234", "CUSTOMER");
     }
 
     private void createRoleIfAbsent(String name) {
