@@ -35,3 +35,6 @@ out/
 
 ### VS Code ###
 .vscode/
+
+### Claude Code (로컬 전용, 저장소에 커밋 금지)
+CLAUDE.md
