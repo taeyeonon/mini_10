@@ -8,6 +8,8 @@
     <style>
         .split { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; align-items: start; }
         @media (max-width: 1100px) { .split { grid-template-columns: 1fr; } }
+        .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; margin-bottom: 20px; }
+        @media (max-width: 1100px) { .two-col { grid-template-columns: 1fr; } }
         .quick { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         .quick a {
             display: block; padding: 16px; border: 1px solid var(--border); border-radius: 12px;
@@ -15,6 +17,11 @@
         }
         .quick a:hover { border-color: var(--primary); color: var(--primary); }
         .quick a small { display: block; margin-top: 4px; font-weight: 500; color: var(--text-weak); }
+        .stat-line { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--border); }
+        .stat-line:last-child { border-bottom: 0; }
+        .stat-line .name { color: var(--text); display: flex; align-items: center; gap: 8px; }
+        .stat-line .figure { font-weight: 700; font-variant-numeric: tabular-nums; }
+        .stat-line .figure small { color: var(--text-weak); font-weight: 500; margin-left: 4px; }
     </style>
 </head>
 <body>
@@ -39,6 +46,10 @@
 
         <section class="summary">
             <div class="card">
+                <div class="label">누적 매출 <span class="badge badge-paid">PAID</span></div>
+                <div class="value" id="statRevenue">-<small>원</small></div>
+            </div>
+            <div class="card">
                 <div class="label">전체 회원</div>
                 <div class="value" id="statUsers">-<small>명</small></div>
             </div>
@@ -51,10 +62,50 @@
                 <div class="value" id="statReady">-<small>건</small></div>
             </div>
             <div class="card">
+                <div class="label">판매 수강권</div>
+                <div class="value" id="statSoldTickets">-<small>회</small></div>
+            </div>
+            <div class="card">
                 <div class="label">등록된 수업</div>
                 <div class="value" id="statSchedules">-<small>건</small></div>
             </div>
         </section>
+
+        <div class="two-col">
+            <section class="card">
+                <div class="card-title">결제 현황</div>
+                <div class="card-desc">전체 결제 시도 기준 집계입니다.</div>
+                <div class="card-body" id="paymentBreakdown">
+                    <p class="empty">불러오는 중...</p>
+                </div>
+            </section>
+
+            <section class="card">
+                <div class="card-title">수업 현황</div>
+                <div class="card-desc">보관되지 않은 전체 수업 기준입니다.</div>
+                <div class="card-body" id="scheduleBreakdown">
+                    <p class="empty">불러오는 중...</p>
+                </div>
+            </section>
+        </div>
+
+        <div class="two-col">
+            <section class="card">
+                <div class="card-title">회원 구성</div>
+                <div class="card-desc">역할별 사용자 수입니다. (역할 중복 가능)</div>
+                <div class="card-body" id="memberBreakdown">
+                    <p class="empty">불러오는 중...</p>
+                </div>
+            </section>
+
+            <section class="card">
+                <div class="card-title">예약 현황</div>
+                <div class="card-desc">전체 수업의 예약·정원 집계입니다.</div>
+                <div class="card-body" id="reservationBreakdown">
+                    <p class="empty">불러오는 중...</p>
+                </div>
+            </section>
+        </div>
 
         <div class="split">
             <section class="card table-card">
@@ -107,10 +158,17 @@
                 adminRequest('/api/admin/schedules')
             ]);
 
+            const summary = payments.summary;
+            document.getElementById('statRevenue').innerHTML =
+                `${summary.paidAmount.toLocaleString()}<small>원</small>`;
             document.getElementById('statUsers').innerHTML = `${users.length.toLocaleString()}<small>명</small>`;
-            document.getElementById('statPaid').innerHTML = `${payments.summary.paid.toLocaleString()}<small>건</small>`;
-            document.getElementById('statReady').innerHTML = `${payments.summary.ready.toLocaleString()}<small>건</small>`;
+            document.getElementById('statPaid').innerHTML = `${summary.paid.toLocaleString()}<small>건</small>`;
+            document.getElementById('statReady').innerHTML = `${summary.ready.toLocaleString()}<small>건</small>`;
+            document.getElementById('statSoldTickets').innerHTML =
+                `${summary.soldTickets.toLocaleString()}<small>회</small>`;
             document.getElementById('statSchedules').innerHTML = `${schedules.length.toLocaleString()}<small>건</small>`;
+
+            renderBreakdowns(summary, users, schedules);
 
             const body = document.getElementById('recentPayments');
             body.innerHTML = payments.content.length
@@ -126,8 +184,54 @@
         } catch (e) {
             document.getElementById('recentPayments').innerHTML =
                 '<tr><td colspan="5" class="empty">불러오지 못했습니다.</td></tr>';
+            ['paymentBreakdown', 'scheduleBreakdown', 'memberBreakdown', 'reservationBreakdown']
+                .forEach(id => { document.getElementById(id).innerHTML = '<p class="empty">불러오지 못했습니다.</p>'; });
             error.textContent = e.message;
         }
+    }
+
+    /** name(배지 등 HTML 허용) - figure 한 줄. */
+    function statLine(name, figure) {
+        return `<div class="stat-line"><span class="name">${name}</span><span class="figure">${figure}</span></div>`;
+    }
+
+    function renderBreakdowns(summary, users, schedules) {
+        // 결제 현황
+        document.getElementById('paymentBreakdown').innerHTML =
+            statLine('전체 결제 시도', `${summary.total.toLocaleString()}<small>건</small>`)
+            + statLine(`${renderBadge(PAYMENT_STATUS_BADGE, 'PAID')} 결제 완료`, `${summary.paid.toLocaleString()}<small>건</small>`)
+            + statLine(`${renderBadge(PAYMENT_STATUS_BADGE, 'READY')} 결제 대기`, `${summary.ready.toLocaleString()}<small>건</small>`)
+            + statLine(`${renderBadge(PAYMENT_STATUS_BADGE, 'FAILED')} 결제 실패`, `${summary.failed.toLocaleString()}<small>건</small>`);
+
+        // 수업 현황
+        const now = Date.now();
+        const byStatus = key => schedules.filter(schedule => schedule.status === key).length;
+        const upcoming = schedules.filter(schedule =>
+            schedule.status === 'OPEN' && new Date(schedule.startTime).getTime() > now).length;
+        document.getElementById('scheduleBreakdown').innerHTML =
+            statLine('전체 수업', `${schedules.length.toLocaleString()}<small>건</small>`)
+            + statLine(`${renderBadge(SCHEDULE_STATUS_BADGE, 'OPEN')} 진행 예정`, `${upcoming.toLocaleString()}<small>건</small>`)
+            + statLine(`${renderBadge(SCHEDULE_STATUS_BADGE, 'COMPLETED')} 완료`, `${byStatus('COMPLETED').toLocaleString()}<small>건</small>`)
+            + statLine(`${renderBadge(SCHEDULE_STATUS_BADGE, 'CANCELLED')} 취소`, `${byStatus('CANCELLED').toLocaleString()}<small>건</small>`);
+
+        // 회원 구성
+        const byRole = role => users.filter(user => (user.roles || []).includes(role)).length;
+        document.getElementById('memberBreakdown').innerHTML =
+            statLine('전체 사용자', `${users.length.toLocaleString()}<small>명</small>`)
+            + statLine(`${renderBadge(ROLE_BADGE, 'CUSTOMER')} 회원`, `${byRole('CUSTOMER').toLocaleString()}<small>명</small>`)
+            + statLine(`${renderBadge(ROLE_BADGE, 'TRAINER')} 트레이너`, `${byRole('TRAINER').toLocaleString()}<small>명</small>`)
+            + statLine(`${renderBadge(ROLE_BADGE, 'ADMIN')} 관리자`, `${byRole('ADMIN').toLocaleString()}<small>명</small>`);
+
+        // 예약 현황
+        const reserved = schedules.reduce((sum, schedule) => sum + schedule.reservedCount, 0);
+        const capacity = schedules.reduce((sum, schedule) => sum + schedule.capacity, 0);
+        const full = schedules.filter(schedule => schedule.full).length;
+        const rate = capacity > 0 ? Math.round((reserved / capacity) * 100) : 0;
+        document.getElementById('reservationBreakdown').innerHTML =
+            statLine('총 예약 인원', `${reserved.toLocaleString()}<small>명</small>`)
+            + statLine('총 정원', `${capacity.toLocaleString()}<small>명</small>`)
+            + statLine('평균 예약률', `${rate}<small>%</small>`)
+            + statLine('정원 마감 수업', `${full.toLocaleString()}<small>건</small>`);
     }
 
     document.addEventListener('DOMContentLoaded', () => {

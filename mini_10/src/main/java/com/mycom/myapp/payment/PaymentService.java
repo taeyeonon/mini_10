@@ -65,7 +65,9 @@ public class PaymentService {
                 orderRepository.count(),
                 orderRepository.countByStatus(PaymentStatus.PAID),
                 orderRepository.countByStatus(PaymentStatus.READY),
-                orderRepository.countByStatus(PaymentStatus.FAILED));
+                orderRepository.countByStatus(PaymentStatus.FAILED),
+                orderRepository.sumAmountByStatus(PaymentStatus.PAID),
+                orderRepository.sumTicketCountByStatus(PaymentStatus.PAID));
         return new AdminPaymentPageResponse(
                 orders.getContent().stream().map(AdminPaymentResponse::from).toList(),
                 orders.getNumber(), orders.getSize(),

@@ -47,8 +47,8 @@
                 <div class="value" id="statUpcoming">-<small>건</small></div>
             </div>
             <div class="card">
-                <div class="label">예약 인원 (예정 수업)</div>
-                <div class="value" id="statReserved">-<small>명</small></div>
+                <div class="label">정원 마감 (예정 수업)</div>
+                <div class="value" id="statFull">-<small>건</small></div>
             </div>
             <div class="card">
                 <div class="label">활성 반복 일정</div>
@@ -115,10 +115,12 @@
                 .filter(schedule => schedule.status === 'OPEN' && new Date(schedule.startTime).getTime() > now)
                 .sort((a, b) => a.startTime.localeCompare(b.startTime));
 
+            const upcomingReserved = upcoming.reduce((sum, schedule) => sum + schedule.reservedCount, 0);
             document.getElementById('statToday').innerHTML = `${today.length}<small>건</small>`;
-            document.getElementById('statUpcoming').innerHTML = `${upcoming.length}<small>건</small>`;
-            document.getElementById('statReserved').innerHTML =
-                `${upcoming.reduce((sum, schedule) => sum + schedule.reservedCount, 0)}<small>명</small>`;
+            document.getElementById('statUpcoming').innerHTML =
+                `${upcoming.length}<small>건</small> <small>(총 ${upcomingReserved}명)</small>`;
+            document.getElementById('statFull').innerHTML =
+                `${upcoming.filter(schedule => schedule.full).length}<small>건</small>`;
             document.getElementById('statTemplates').innerHTML =
                 `${templates.filter(template => template.active).length}<small>개</small>`;
 
