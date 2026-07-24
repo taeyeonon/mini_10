@@ -52,6 +52,25 @@ public class TrainerScheduleService {
                 .toList();
     }
 
+    /** 관리자용 전체 수업 조회. 트레이너/상태/과거 여부를 가리지 않고 모두 내려준다. */
+    @Transactional(readOnly = true)
+    public List<ScheduleResponse> findAllForAdmin() {
+        return scheduleRepository.findAllByArchivedFalseOrderByStartTimeDesc().stream()
+                .map(ScheduleResponse::from)
+                .toList();
+    }
+
+    /**
+     * 종료된 OPEN 수업을 COMPLETED 로 일괄 전환한다. (스케줄러가 주기적으로 호출)
+     * 벌크 UPDATE 한 번으로 처리하므로 대상 건수와 무관하게 비용이 일정하다.
+     *
+     * @return 전환된 수업 수
+     */
+    @Transactional
+    public int completeEndedSchedules() {
+        return scheduleRepository.markCompletedBefore(LocalDateTime.now());
+    }
+
     @Transactional(readOnly = true)
     public List<ScheduleResponse> findAvailable() {
         return scheduleRepository

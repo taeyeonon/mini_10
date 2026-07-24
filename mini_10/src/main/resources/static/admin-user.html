@@ -1,0 +1,270 @@
+﻿<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>관리자 - 회원 관리</title>
+    <link rel="stylesheet" href="/assets/css/console.css">
+</head>
+<body>
+<div class="layout">
+    <aside class="sidebar"></aside>
+
+    <main class="main">
+        <div class="page-header">
+            <div>
+                <h1>회원 관리</h1>
+                <div class="today"></div>
+            </div>
+            <div class="profile">
+                <div class="avatar">A</div>
+                <div class="profile-text">
+                    <div class="role">관리자</div>
+                    <div class="email"></div>
+                </div>
+                <button class="btn-ghost" onclick="jwtLogout()">로그아웃</button>
+            </div>
+        </div>
+
+        <section class="summary">
+            <div class="card">
+                <div class="label">전체 사용자</div>
+                <div class="value" id="statTotal">-<small>명</small></div>
+            </div>
+            <div class="card">
+                <div class="label">회원 <span class="badge badge-info">CUSTOMER</span></div>
+                <div class="value" id="statCustomer">-<small>명</small></div>
+            </div>
+            <div class="card">
+                <div class="label">트레이너 <span class="badge badge-ready">TRAINER</span></div>
+                <div class="value" id="statTrainer">-<small>명</small></div>
+            </div>
+            <div class="card">
+                <div class="label">관리자 <span class="badge badge-canceled">ADMIN</span></div>
+                <div class="value" id="statAdmin">-<small>명</small></div>
+            </div>
+        </section>
+
+        <section class="card" style="margin-bottom: 16px;">
+            <div class="card-title">🎟️ 수강권 수동 발급</div>
+            <div class="card-desc">결제 없이 회원에게 수강권을 직접 지급합니다.</div>
+            <div class="card-body">
+                <div class="form-grid">
+                    <div>
+                        <label for="ticketUserId">대상 회원</label>
+                        <select id="ticketUserId"><option value="">회원을 불러오는 중...</option></select>
+                    </div>
+                    <div>
+                        <label for="totalCount">총 횟수</label>
+                        <input type="number" id="totalCount" min="1" value="10">
+                    </div>
+                    <div>
+                        <label for="startDate">시작일</label>
+                        <input type="date" id="startDate">
+                    </div>
+                    <div>
+                        <label for="endDate">종료일</label>
+                        <input type="date" id="endDate">
+                    </div>
+                    <div>
+                        <button class="btn-primary" id="issueButton" style="width: 100%;">수강권 발급</button>
+                    </div>
+                </div>
+                <div class="message" id="issueMessage"></div>
+            </div>
+        </section>
+
+        <section class="card toolbar">
+            <input type="text" id="keyword" placeholder="이름 · 이메일 · ID로 검색">
+            <select id="role">
+                <option value="">전체 역할</option>
+                <option value="CUSTOMER">회원 (CUSTOMER)</option>
+                <option value="TRAINER">트레이너 (TRAINER)</option>
+                <option value="ADMIN">관리자 (ADMIN)</option>
+            </select>
+            <button class="btn-primary" id="searchButton">검색</button>
+            <button class="btn-ghost" id="refreshButton">새로고침</button>
+        </section>
+
+        <section class="card table-card">
+            <div class="table-scroll">
+                <table>
+                    <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>이름</th>
+                        <th>이메일</th>
+                        <th>역할</th>
+                    </tr>
+                    </thead>
+                    <tbody id="tableBody">
+                    <tr><td colspan="4" class="empty">불러오는 중...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="pagination" id="pagination"></div>
+            <div class="page-info" id="pageInfo"></div>
+            <div class="message error" id="errorMessage"></div>
+        </section>
+    </main>
+</div>
+
+<script src="/assets/js/common.js"></script>
+<script src="/assets/js/console.js"></script>
+<script src="/assets/js/admin.js"></script>
+<script>
+    // 전체 목록 API 라서 검색·페이징은 클라이언트에서 처리한다.
+    const state = { all: [], page: 0, size: loadAdminSettings().pageSize };
+
+    async function loadUsers() {
+        const error = document.getElementById('errorMessage');
+        error.textContent = '';
+        try {
+            state.all = await adminRequest('/admin/users');
+            renderSummary();
+            renderCustomerOptions();
+            state.page = 0;
+            render();
+        } catch (e) {
+            document.getElementById('tableBody').innerHTML =
+                '<tr><td colspan="4" class="empty">회원 목록을 불러오지 못했습니다.</td></tr>';
+            error.textContent = e.message;
+        }
+    }
+
+    function countByRole(role) {
+        return state.all.filter(user => (user.roles || []).includes(role)).length;
+    }
+
+    function renderSummary() {
+        document.getElementById('statTotal').innerHTML = `${state.all.length.toLocaleString()}<small>명</small>`;
+        document.getElementById('statCustomer').innerHTML = `${countByRole('CUSTOMER').toLocaleString()}<small>명</small>`;
+        document.getElementById('statTrainer').innerHTML = `${countByRole('TRAINER').toLocaleString()}<small>명</small>`;
+        document.getElementById('statAdmin').innerHTML = `${countByRole('ADMIN').toLocaleString()}<small>명</small>`;
+    }
+
+    function renderCustomerOptions() {
+        const select = document.getElementById('ticketUserId');
+        const customers = state.all.filter(user => (user.roles || []).includes('CUSTOMER'));
+        select.innerHTML = customers.length
+            ? '<option value="">회원 선택</option>' + customers.map(user =>
+                `<option value="${user.id}">${escapeHtml(user.name)} (${escapeHtml(user.email)})</option>`).join('')
+            : '<option value="">발급 가능한 회원이 없습니다</option>';
+    }
+
+    function filtered() {
+        const keyword = document.getElementById('keyword').value.trim().toLowerCase();
+        const role = document.getElementById('role').value;
+
+        return state.all.filter(user => {
+            if (role && !(user.roles || []).includes(role)) return false;
+            if (!keyword) return true;
+            return String(user.id) === keyword
+                || (user.name || '').toLowerCase().includes(keyword)
+                || (user.email || '').toLowerCase().includes(keyword);
+        });
+    }
+
+    function render() {
+        const result = slicePage(filtered(), state.page, state.size);
+        state.page = result.page;
+
+        const body = document.getElementById('tableBody');
+        body.innerHTML = result.content.length
+            ? result.content.map(user => `
+                <tr>
+                    <td class="muted">#${user.id}</td>
+                    <td>${escapeHtml(user.name)}</td>
+                    <td class="mono">${escapeHtml(user.email)}</td>
+                    <td>${(user.roles || []).length
+                        ? user.roles.map(role => renderBadge(ROLE_BADGE, role)).join(' ')
+                        : '<span class="muted">-</span>'}</td>
+                </tr>`).join('')
+            : '<tr><td colspan="4" class="empty">조건에 맞는 회원이 없습니다.</td></tr>';
+
+        renderPagination(document.getElementById('pagination'), result);
+        document.getElementById('pageInfo').textContent = result.totalPages
+            ? `전체 ${result.totalElements.toLocaleString()}명 · ${result.page + 1} / ${result.totalPages} 페이지`
+            : '';
+    }
+
+    async function issueTicket() {
+        const message = document.getElementById('issueMessage');
+        const button = document.getElementById('issueButton');
+        message.className = 'message';
+        message.textContent = '';
+
+        const dto = {
+            userId: Number(document.getElementById('ticketUserId').value),
+            totalCount: Number(document.getElementById('totalCount').value),
+            startDate: document.getElementById('startDate').value,
+            endDate: document.getElementById('endDate').value
+        };
+        if (!dto.userId) {
+            message.className = 'message error';
+            message.textContent = '회원을 선택해 주세요.';
+            return;
+        }
+        if (!dto.totalCount || dto.totalCount < 1) {
+            message.className = 'message error';
+            message.textContent = '총 횟수는 1회 이상이어야 합니다.';
+            return;
+        }
+        if (!dto.startDate || !dto.endDate || dto.startDate > dto.endDate) {
+            message.className = 'message error';
+            message.textContent = '사용 기간을 올바르게 입력해 주세요.';
+            return;
+        }
+
+        button.disabled = true;
+        try {
+            const result = await adminRequest('/admin/tickets/issue', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(dto)
+            });
+            message.className = 'message success';
+            message.textContent = typeof result === 'string' ? result : '수강권을 발급했습니다.';
+        } catch (e) {
+            message.className = 'message error';
+            message.textContent = e.message;
+        } finally {
+            button.disabled = false;
+        }
+    }
+
+    function search() {
+        state.page = 0;
+        render();
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        if (!initAdminPage('user')) return;
+
+        // 기본 사용 기간: 오늘 ~ 1개월 후
+        const today = new Date();
+        const nextMonth = new Date();
+        nextMonth.setMonth(today.getMonth() + 1);
+        document.getElementById('startDate').value = toDateInput(today);
+        document.getElementById('endDate').value = toDateInput(nextMonth);
+
+        document.getElementById('issueButton').addEventListener('click', issueTicket);
+        document.getElementById('searchButton').addEventListener('click', search);
+        document.getElementById('refreshButton').addEventListener('click', loadUsers);
+        document.getElementById('role').addEventListener('change', search);
+        document.getElementById('keyword').addEventListener('keydown', event => {
+            if (event.key === 'Enter') search();
+        });
+        document.getElementById('pagination').addEventListener('click', event => {
+            const button = event.target.closest('button[data-page]');
+            if (button && !button.disabled) {
+                state.page = Number(button.dataset.page);
+                render();
+            }
+        });
+
+        loadUsers();
+    });
+</script>
+</body>
+</html>

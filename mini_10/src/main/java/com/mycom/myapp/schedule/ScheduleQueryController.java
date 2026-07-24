@@ -23,7 +23,7 @@ public class ScheduleQueryController {
     }
 
     @GetMapping("/{scheduleId}")
-    public ScheduleResponse findOne(@PathVariable Long scheduleId) {
+    public ScheduleResponse findOne(@PathVariable("scheduleId") Long scheduleId) {
         return scheduleService.findOne(scheduleId);
     }
 }

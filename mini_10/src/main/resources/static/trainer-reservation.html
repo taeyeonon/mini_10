@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>트레이너 - 예약 현황</title>
+    <link rel="stylesheet" href="/assets/css/console.css">
+    <style>
+        .split { display: grid; grid-template-columns: 340px 1fr; gap: 16px; align-items: start; }
+        @media (max-width: 1000px) { .split { grid-template-columns: 1fr; } }
+        .class-list { max-height: 620px; overflow-y: auto; padding: 8px; }
+        .class-item {
+            display: block; width: 100%; height: auto; text-align: left; padding: 14px;
+            border: 1px solid var(--border); border-radius: 12px; background: #fff;
+            margin-bottom: 8px; font-weight: 500; color: var(--text-strong);
+        }
+        .class-item:hover { border-color: var(--primary); }
+        .class-item.active { border-color: var(--primary); background: var(--primary-weak); }
+        .class-item .when { font-weight: 700; margin-bottom: 4px; }
+        .class-item .meta { color: var(--text-weak); font-size: 12px; font-weight: 500; }
+    </style>
+</head>
+<body>
+<div class="layout">
+    <aside class="sidebar"></aside>
+
+    <main class="main">
+        <div class="page-header">
+            <div>
+                <h1>예약 현황</h1>
+                <div class="today"></div>
+            </div>
+            <div class="profile">
+                <div class="avatar">T</div>
+                <div class="profile-text">
+                    <div class="role">트레이너</div>
+                    <div class="email"></div>
+                </div>
+                <button class="btn-ghost" onclick="jwtLogout()">로그아웃</button>
+            </div>
+        </div>
+
+        <section class="summary">
+            <div class="card">
+                <div class="label">선택한 수업</div>
+                <div class="value" id="statSchedule">-</div>
+            </div>
+            <div class="card">
+                <div class="label">예약 확정 <span class="badge badge-paid">CONFIRMED</span></div>
+                <div class="value" id="statConfirmed">-<small>명</small></div>
+            </div>
+            <div class="card">
+                <div class="label">예약 취소 <span class="badge badge-canceled">CANCELLED</span></div>
+                <div class="value" id="statCancelled">-<small>명</small></div>
+            </div>
+            <div class="card">
+                <div class="label">잔여 자리</div>
+                <div class="value" id="statAvailable">-<small>명</small></div>
+            </div>
+        </section>
+
+        <div class="split">
+            <section class="card">
+                <div class="card-title">내 수업</div>
+                <div class="card-desc">수업을 고르면 예약자 명단이 표시됩니다.</div>
+                <div class="toolbar" style="padding: 14px; margin: 0;">
+                    <select id="period" style="flex: 1;">
+                        <option value="upcoming">진행 예정</option>
+                        <option value="past">지난 수업</option>
+                        <option value="">전체</option>
+                    </select>
+                </div>
+                <div class="class-list" id="classList">
+                    <p class="empty">불러오는 중...</p>
+                </div>
+            </section>
+
+            <section class="card table-card">
+                <div class="card-title" id="rosterTitle">예약자 명단</div>
+                <div class="card-desc" id="rosterDesc">왼쪽에서 수업을 선택해 주세요.</div>
+                <div class="table-scroll" style="margin-top: 16px;">
+                    <table>
+                        <thead>
+                        <tr>
+                            <th>예약 ID</th>
+                            <th>회원</th>
+                            <th>이메일</th>
+                            <th>예약 시각</th>
+                            <th>상태</th>
+                        </tr>
+                        </thead>
+                        <tbody id="rosterBody">
+                        <tr><td colspan="5" class="empty">수업을 선택해 주세요.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="message error" id="errorMessage"></div>
+            </section>
+        </div>
+    </main>
+</div>
+
+<script src="/assets/js/common.js"></script>
+<script src="/assets/js/console.js"></script>
+<script src="/assets/js/trainer.js"></script>
+<script>
+    const state = { schedules: [], selectedId: null };
+
+    async function loadSchedules() {
+        const error = document.getElementById('errorMessage');
+        error.textContent = '';
+        try {
+            state.schedules = await trainerRequest('/api/trainer/schedules');
+            renderClassList();
+
+            // 일정 화면에서 ?scheduleId= 로 넘어온 경우 해당 수업을 바로 연다.
+            const requested = Number(new URLSearchParams(location.search).get('scheduleId'));
+            const target = state.schedules.find(schedule => schedule.id === requested)
+                || nextSchedule();
+            if (target) selectSchedule(target.id);
+        } catch (e) {
+            document.getElementById('classList').innerHTML = '<p class="empty">수업을 불러오지 못했습니다.</p>';
+            error.textContent = e.message;
+        }
+    }
+
+    /** 가장 가까운 예정 수업 (없으면 가장 최근 수업). */
+    function nextSchedule() {
+        const now = Date.now();
+        const upcoming = state.schedules
+            .filter(schedule => new Date(schedule.startTime).getTime() > now)
+            .sort((a, b) => a.startTime.localeCompare(b.startTime));
+        if (upcoming.length) return upcoming[0];
+        return [...state.schedules].sort((a, b) => b.startTime.localeCompare(a.startTime))[0];
+    }
+
+    function filteredSchedules() {
+        const period = document.getElementById('period').value;
+        const now = Date.now();
+        return state.schedules
+            .filter(schedule => {
+                const startedAt = new Date(schedule.startTime).getTime();
+                if (period === 'upcoming' && startedAt <= now) return false;
+                if (period === 'past' && startedAt > now) return false;
+                return true;
+            })
+            .sort((a, b) => period === 'past'
+                ? b.startTime.localeCompare(a.startTime)
+                : a.startTime.localeCompare(b.startTime));
+    }
+
+    function renderClassList() {
+        const list = document.getElementById('classList');
+        const schedules = filteredSchedules();
+        list.innerHTML = schedules.length
+            ? schedules.map(schedule => `
+                <button class="class-item ${schedule.id === state.selectedId ? 'active' : ''}"
+                        data-id="${schedule.id}">
+                    <div class="when">${formatDateTime(schedule.startTime)}</div>
+                    <div class="meta">
+                        수업 #${schedule.id} · 예약 ${schedule.reservedCount}/${schedule.capacity}명
+                    </div>
+                    <div class="meta" style="margin-top:6px;">
+                        ${renderBadge(SCHEDULE_STATUS_BADGE, schedule.status)}
+                        ${schedule.full ? '<span class="badge badge-canceled">마감</span>' : ''}
+                    </div>
+                </button>`).join('')
+            : '<p class="empty">해당 기간의 수업이 없습니다.</p>';
+    }
+
+    async function selectSchedule(scheduleId) {
+        state.selectedId = scheduleId;
+        renderClassList();
+
+        const schedule = state.schedules.find(item => item.id === scheduleId);
+        const error = document.getElementById('errorMessage');
+        error.textContent = '';
+        document.getElementById('rosterTitle').textContent = `수업 #${scheduleId} 예약자 명단`;
+        document.getElementById('rosterDesc').textContent = schedule
+            ? `${formatDateTime(schedule.startTime)} ~ ${formatTime(schedule.endTime)} · 정원 ${schedule.capacity}명`
+            : '';
+        document.getElementById('statSchedule').textContent = `#${scheduleId}`;
+
+        try {
+            const reservations = await trainerRequest(`/api/trainer/schedules/${scheduleId}/reservations`);
+            renderRoster(reservations, schedule);
+        } catch (e) {
+            document.getElementById('rosterBody').innerHTML =
+                '<tr><td colspan="5" class="empty">예약자 명단을 불러오지 못했습니다.</td></tr>';
+            error.textContent = e.message;
+        }
+    }
+
+    function renderRoster(reservations, schedule) {
+        const confirmed = reservations.filter(item => item.status === 'CONFIRMED');
+        const cancelled = reservations.filter(item => item.status === 'CANCELLED');
+        document.getElementById('statConfirmed').innerHTML = `${confirmed.length}<small>명</small>`;
+        document.getElementById('statCancelled').innerHTML = `${cancelled.length}<small>명</small>`;
+        document.getElementById('statAvailable').innerHTML =
+            `${schedule ? schedule.availableCount : '-'}<small>명</small>`;
+
+        const body = document.getElementById('rosterBody');
+        body.innerHTML = reservations.length
+            ? reservations.map(reservation => `
+                <tr>
+                    <td class="muted">#${reservation.reservationId}</td>
+                    <td>
+                        ${escapeHtml(reservation.memberName)}
+                        <div class="muted mono">ID ${reservation.memberId}</div>
+                    </td>
+                    <td class="mono">${escapeHtml(reservation.memberEmail)}</td>
+                    <td class="muted">${formatDateTime(reservation.reservedAt)}</td>
+                    <td>${renderBadge(RESERVATION_STATUS_BADGE, reservation.status)}</td>
+                </tr>`).join('')
+            : '<tr><td colspan="5" class="empty">아직 예약한 회원이 없습니다.</td></tr>';
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        if (!initTrainerPage('reservation')) return;
+
+        document.getElementById('period').addEventListener('change', renderClassList);
+        document.getElementById('classList').addEventListener('click', event => {
+            const button = event.target.closest('button[data-id]');
+            if (button) selectSchedule(Number(button.dataset.id));
+        });
+
+        loadSchedules();
+    });
+</script>
+</body>
+</html>

@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>트레이너 - 설정</title>
+    <link rel="stylesheet" href="/assets/css/console.css">
+    <style>
+        .split { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+        @media (max-width: 1000px) { .split { grid-template-columns: 1fr; } }
+        .info-row { display: flex; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+        .info-row:last-child { border-bottom: 0; }
+        .info-row dt { color: var(--text); font-weight: 500; }
+        .info-row dd { margin: 0; text-align: right; word-break: break-all; }
+        dl { margin: 0; }
+    </style>
+</head>
+<body>
+<div class="layout">
+    <aside class="sidebar"></aside>
+
+    <main class="main">
+        <div class="page-header">
+            <div>
+                <h1>설정</h1>
+                <div class="today"></div>
+            </div>
+            <div class="profile">
+                <div class="avatar">T</div>
+                <div class="profile-text">
+                    <div class="role">트레이너</div>
+                    <div class="email"></div>
+                </div>
+                <button class="btn-ghost" onclick="jwtLogout()">로그아웃</button>
+            </div>
+        </div>
+
+        <div class="split">
+            <section class="card">
+                <div class="card-title">화면 기본값</div>
+                <div class="card-desc">이 브라우저에만 저장되며 일정 목록에 바로 반영됩니다.</div>
+                <div class="card-body">
+                    <div style="margin-bottom: 16px;">
+                        <label for="pageSize">테이블 페이지당 행 수</label>
+                        <select id="pageSize" style="width: 100%;">
+                            <option value="10">10개</option>
+                            <option value="20">20개</option>
+                            <option value="50">50개</option>
+                        </select>
+                    </div>
+                    <button class="btn-primary" id="saveButton">저장</button>
+                    <button class="btn-ghost" id="resetButton">기본값으로</button>
+                    <div class="message" id="saveMessage" style="padding-left: 0;"></div>
+                </div>
+            </section>
+
+            <section class="card">
+                <div class="card-title">로그인 계정</div>
+                <div class="card-desc">현재 세션에 저장된 인증 정보입니다.</div>
+                <div class="card-body">
+                    <dl>
+                        <div class="info-row"><dt>이름</dt><dd id="infoName">-</dd></div>
+                        <div class="info-row"><dt>이메일</dt><dd id="infoEmail">-</dd></div>
+                        <div class="info-row"><dt>역할</dt><dd id="infoRoles">-</dd></div>
+                        <div class="info-row"><dt>토큰 만료</dt><dd id="infoExpires">-</dd></div>
+                        <div class="info-row"><dt>토큰 전달 헤더</dt><dd class="mono">X-AUTH-TOKEN</dd></div>
+                    </dl>
+                    <button class="btn-ghost" style="margin-top: 16px;" onclick="jwtLogout()">로그아웃</button>
+                </div>
+            </section>
+        </div>
+    </main>
+</div>
+
+<script src="/assets/js/common.js"></script>
+<script src="/assets/js/console.js"></script>
+<script src="/assets/js/trainer.js"></script>
+<script>
+    function renderAccount() {
+        const user = getCurrentUserInfo();
+        document.getElementById('infoName').textContent = user.name || '-';
+        document.getElementById('infoEmail').textContent = user.email || '-';
+        document.getElementById('infoRoles').innerHTML = user.roles.length
+            ? user.roles.map(role => renderBadge(ROLE_BADGE, role)).join(' ')
+            : '-';
+
+        const payload = getJwtPayload();
+        document.getElementById('infoExpires').textContent = payload?.exp
+            ? new Date(payload.exp * 1000).toLocaleString('ko-KR')
+            : '-';
+    }
+
+    function showMessage(text) {
+        const message = document.getElementById('saveMessage');
+        message.className = 'message success';
+        message.textContent = text;
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        if (!initTrainerPage('settings')) return;
+
+        renderAccount();
+        document.getElementById('pageSize').value = String(loadConsoleSettings().pageSize);
+
+        document.getElementById('saveButton').addEventListener('click', () => {
+            saveConsoleSettings({ pageSize: Number(document.getElementById('pageSize').value) });
+            showMessage('저장했습니다. 목록 화면에 바로 적용됩니다.');
+        });
+        document.getElementById('resetButton').addEventListener('click', () => {
+            localStorage.removeItem(CONSOLE_SETTINGS_KEY);
+            document.getElementById('pageSize').value = String(DEFAULT_CONSOLE_SETTINGS.pageSize);
+            showMessage('기본값으로 되돌렸습니다.');
+        });
+    });
+</script>
+</body>
+</html>

@@ -57,9 +57,20 @@ public class SecurityConfig {
 											"/register.html",
 											"/users/**",
 											"/auth/**",
+											// 정적 화면은 모두 공개하고, 실제 권한 검사는 아래 API 규칙에서 한다.
+											// (화면 안의 requireAuth() 는 사용자 흐름용 1차 가드일 뿐이다.)
 											"/admin.html",
+											"/admin-dashboard.html",
+											"/admin-payment.html",
+											"/admin-schedule.html",
+											"/admin-user.html",
+											"/admin-settings.html",
 											"/customer.html",
-											"/trainer.html"
+											"/trainer.html",
+											"/trainer-dashboard.html",
+											"/trainer-template.html",
+											"/trainer-reservation.html",
+											"/trainer-settings.html"
 										).permitAll()
 										
 										// 태연님: 트레이너 전용 일정 API (TRAINER 권한)
@@ -73,7 +84,7 @@ public class SecurityConfig {
 										.hasAnyRole("CUSTOMER", "TRAINER", "ADMIN")
 										
 										.requestMatchers("/customer/**").hasAnyRole("CUSTOMER", "ADMIN")
-										.requestMatchers("/admin/**").hasRole("ADMIN")
+										.requestMatchers("/admin/**", "/api/admin/**").hasRole("ADMIN")
 										.anyRequest().authenticated()
 				)
 				.exceptionHandling(exceptionHandling -> exceptionHandling

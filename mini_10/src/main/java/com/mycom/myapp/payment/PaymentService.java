@@ -1,21 +1,33 @@
 package com.mycom.myapp.payment;
 
-import com.mycom.myapp.common.ForbiddenOperationException;
-import com.mycom.myapp.payment.dto.*;
-import com.mycom.myapp.ticket.service.TicketService;
-import com.mycom.myapp.user.entity.User;
-import com.mycom.myapp.user.repository.UserRepository;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.util.Base64;
 import java.util.Map;
 import java.util.UUID;
+
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
+
+import com.mycom.myapp.common.ForbiddenOperationException;
+import com.mycom.myapp.payment.dto.AdminPaymentPageResponse;
+import com.mycom.myapp.payment.dto.AdminPaymentResponse;
+import com.mycom.myapp.payment.dto.AdminPaymentSummary;
+import com.mycom.myapp.payment.dto.PaymentConfirmRequest;
+import com.mycom.myapp.payment.dto.PaymentConfirmResponse;
+import com.mycom.myapp.payment.dto.PaymentOrderRequest;
+import com.mycom.myapp.payment.dto.PaymentOrderResponse;
+import com.mycom.myapp.ticket.service.TicketService;
+import com.mycom.myapp.user.entity.User;
+import com.mycom.myapp.user.repository.UserRepository;
 
 @Service
 public class PaymentService {
@@ -39,6 +51,25 @@ public class PaymentService {
         this.clientKey = clientKey;
         this.secretKey = secretKey;
         this.restClient = RestClient.create("https://api.tosspayments.com");
+    }
+
+    /** 관리자 결제 관리 화면용 목록 조회. 검색·상태 필터는 선택값이며 요약은 항상 전체 기준이다. */
+    @Transactional(readOnly = true)
+    public AdminPaymentPageResponse findPayments(PaymentStatus status, String keyword, int page, int size) {
+        String searchKeyword = (keyword == null || keyword.isBlank()) ? null : keyword.trim();
+        Pageable pageable = PageRequest.of(
+                Math.max(page, 0), Math.min(Math.max(size, 1), 100), Sort.by(Sort.Direction.DESC, "id"));
+        Page<PaymentOrder> orders = orderRepository.search(status, searchKeyword, pageable);
+
+        AdminPaymentSummary summary = new AdminPaymentSummary(
+                orderRepository.count(),
+                orderRepository.countByStatus(PaymentStatus.PAID),
+                orderRepository.countByStatus(PaymentStatus.READY),
+                orderRepository.countByStatus(PaymentStatus.FAILED));
+        return new AdminPaymentPageResponse(
+                orders.getContent().stream().map(AdminPaymentResponse::from).toList(),
+                orders.getNumber(), orders.getSize(),
+                orders.getTotalElements(), orders.getTotalPages(), summary);
     }
 
     @Transactional

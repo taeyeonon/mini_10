@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>트레이너 - 대시보드</title>
+    <link rel="stylesheet" href="/assets/css/console.css">
+    <style>
+        .split { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; align-items: start; }
+        @media (max-width: 1100px) { .split { grid-template-columns: 1fr; } }
+        .quick { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .quick a {
+            display: block; padding: 16px; border: 1px solid var(--border); border-radius: 12px;
+            text-decoration: none; color: var(--text-strong); font-weight: 600;
+        }
+        .quick a:hover { border-color: var(--primary); color: var(--primary); }
+        .quick a small { display: block; margin-top: 4px; font-weight: 500; color: var(--text-weak); }
+    </style>
+</head>
+<body>
+<div class="layout">
+    <aside class="sidebar"></aside>
+
+    <main class="main">
+        <div class="page-header">
+            <div>
+                <h1>트레이너 대시보드</h1>
+                <div class="today"></div>
+            </div>
+            <div class="profile">
+                <div class="avatar">T</div>
+                <div class="profile-text">
+                    <div class="role">트레이너</div>
+                    <div class="email"></div>
+                </div>
+                <button class="btn-ghost" onclick="jwtLogout()">로그아웃</button>
+            </div>
+        </div>
+
+        <section class="summary">
+            <div class="card">
+                <div class="label">오늘 수업</div>
+                <div class="value" id="statToday">-<small>건</small></div>
+            </div>
+            <div class="card">
+                <div class="label">진행 예정 <span class="badge badge-paid">OPEN</span></div>
+                <div class="value" id="statUpcoming">-<small>건</small></div>
+            </div>
+            <div class="card">
+                <div class="label">예약 인원 (예정 수업)</div>
+                <div class="value" id="statReserved">-<small>명</small></div>
+            </div>
+            <div class="card">
+                <div class="label">활성 반복 일정</div>
+                <div class="value" id="statTemplates">-<small>개</small></div>
+            </div>
+        </section>
+
+        <div class="split">
+            <section class="card">
+                <div class="card-title">오늘의 수업</div>
+                <div class="card-desc" id="todayDesc">오늘 예정된 수업을 시간순으로 보여줍니다.</div>
+                <div class="timeline" id="todayTimeline">
+                    <p class="empty">불러오는 중...</p>
+                </div>
+            </section>
+
+            <div>
+                <section class="card" style="margin-bottom: 16px;">
+                    <div class="card-title">다가오는 수업</div>
+                    <div class="card-desc">가장 가까운 5개 수업입니다.</div>
+                    <div class="timeline" id="upcomingTimeline">
+                        <p class="empty">불러오는 중...</p>
+                    </div>
+                </section>
+
+                <section class="card">
+                    <div class="card-title">바로가기</div>
+                    <div class="card-body quick">
+                        <a href="/trainer.html">🗓️ 수업 일정<small>생성·수정·취소</small></a>
+                        <a href="/trainer-template.html">🔁 반복 일정<small>요일별 규칙</small></a>
+                        <a href="/trainer-reservation.html">🙋 예약 현황<small>수업별 예약자</small></a>
+                        <a href="/trainer-settings.html">⚙️ 설정<small>화면 기본값</small></a>
+                    </div>
+                </section>
+            </div>
+        </div>
+
+        <div class="message error" id="errorMessage"></div>
+    </main>
+</div>
+
+<script src="/assets/js/common.js"></script>
+<script src="/assets/js/console.js"></script>
+<script src="/assets/js/trainer.js"></script>
+<script>
+    function isSameDay(value, date) {
+        return value.slice(0, 10) === toDateInput(date);
+    }
+
+    async function loadDashboard() {
+        const error = document.getElementById('errorMessage');
+        error.textContent = '';
+        try {
+            const [schedules, templates] = await Promise.all([
+                trainerRequest('/api/trainer/schedules'),
+                trainerRequest('/api/trainer/schedule-templates')
+            ]);
+
+            const now = Date.now();
+            const today = schedules
+                .filter(schedule => isSameDay(schedule.startTime, new Date()))
+                .sort((a, b) => a.startTime.localeCompare(b.startTime));
+            const upcoming = schedules
+                .filter(schedule => schedule.status === 'OPEN' && new Date(schedule.startTime).getTime() > now)
+                .sort((a, b) => a.startTime.localeCompare(b.startTime));
+
+            document.getElementById('statToday').innerHTML = `${today.length}<small>건</small>`;
+            document.getElementById('statUpcoming').innerHTML = `${upcoming.length}<small>건</small>`;
+            document.getElementById('statReserved').innerHTML =
+                `${upcoming.reduce((sum, schedule) => sum + schedule.reservedCount, 0)}<small>명</small>`;
+            document.getElementById('statTemplates').innerHTML =
+                `${templates.filter(template => template.active).length}<small>개</small>`;
+
+            renderTimeline('todayTimeline', today, '오늘 예정된 수업이 없습니다.');
+            renderTimeline('upcomingTimeline', upcoming.slice(0, 5), '예정된 수업이 없습니다.');
+        } catch (e) {
+            document.getElementById('todayTimeline').innerHTML = '<p class="empty">불러오지 못했습니다.</p>';
+            document.getElementById('upcomingTimeline').innerHTML = '<p class="empty">불러오지 못했습니다.</p>';
+            error.textContent = e.message;
+        }
+    }
+
+    function renderTimeline(elementId, schedules, emptyText) {
+        const box = document.getElementById(elementId);
+        if (!schedules.length) {
+            box.innerHTML = `<p class="empty">${emptyText}</p>`;
+            return;
+        }
+        const now = Date.now();
+        box.innerHTML = schedules.map(schedule => {
+            const done = new Date(schedule.endTime).getTime() < now;
+            const cancelled = schedule.status === 'CANCELLED';
+            return `
+                <div class="timeline-item ${cancelled ? 'is-cancelled' : done ? 'is-done' : ''}">
+                    <div class="timeline-time">
+                        ${formatTime(schedule.startTime)}
+                        <small>${formatTime(schedule.endTime)} 종료</small>
+                    </div>
+                    <div class="timeline-body">
+                        <div class="title">
+                            수업 #${schedule.id} ${renderBadge(SCHEDULE_STATUS_BADGE, schedule.status)}
+                        </div>
+                        <div class="meta">
+                            ${formatDate(schedule.startTime)} ·
+                            예약 ${schedule.reservedCount} / 정원 ${schedule.capacity}명
+                            ${schedule.full ? '· <strong>정원 마감</strong>' : `· 잔여 ${schedule.availableCount}명`}
+                        </div>
+                        ${renderGauge(schedule.reservedCount, schedule.capacity)}
+                    </div>
+                </div>`;
+        }).join('');
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        if (!initTrainerPage('dashboard')) return;
+        loadDashboard();
+    });
+</script>
+</body>
+</html>

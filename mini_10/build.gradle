@@ -18,6 +18,12 @@ repositories {
 	mavenCentral()
 }
 
+// 파라미터 이름을 클래스 파일에 남긴다.
+// (@RequestParam/@PathVariable 이름을 생략해도 동작하게 하는 옵션 — IDE 빌드에서 누락되는 경우가 있어 명시)
+tasks.withType(JavaCompile).configureEach {
+	options.compilerArgs << '-parameters'
+}
+
 dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
 	implementation 'org.springframework.boot:spring-boot-starter-security'

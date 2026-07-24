@@ -1,0 +1,139 @@
+﻿<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>관리자 - 대시보드</title>
+    <link rel="stylesheet" href="/assets/css/console.css">
+    <style>
+        .split { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; align-items: start; }
+        @media (max-width: 1100px) { .split { grid-template-columns: 1fr; } }
+        .quick { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .quick a {
+            display: block; padding: 16px; border: 1px solid var(--border); border-radius: 12px;
+            text-decoration: none; color: var(--text-strong); font-weight: 600;
+        }
+        .quick a:hover { border-color: var(--primary); color: var(--primary); }
+        .quick a small { display: block; margin-top: 4px; font-weight: 500; color: var(--text-weak); }
+    </style>
+</head>
+<body>
+<div class="layout">
+    <aside class="sidebar"></aside>
+
+    <main class="main">
+        <div class="page-header">
+            <div>
+                <h1>대시보드</h1>
+                <div class="today"></div>
+            </div>
+            <div class="profile">
+                <div class="avatar">A</div>
+                <div class="profile-text">
+                    <div class="role">관리자</div>
+                    <div class="email"></div>
+                </div>
+                <button class="btn-ghost" onclick="jwtLogout()">로그아웃</button>
+            </div>
+        </div>
+
+        <section class="summary">
+            <div class="card">
+                <div class="label">전체 회원</div>
+                <div class="value" id="statUsers">-<small>명</small></div>
+            </div>
+            <div class="card">
+                <div class="label">결제 완료 <span class="badge badge-paid">PAID</span></div>
+                <div class="value" id="statPaid">-<small>건</small></div>
+            </div>
+            <div class="card">
+                <div class="label">결제 대기 <span class="badge badge-ready">READY</span></div>
+                <div class="value" id="statReady">-<small>건</small></div>
+            </div>
+            <div class="card">
+                <div class="label">등록된 수업</div>
+                <div class="value" id="statSchedules">-<small>건</small></div>
+            </div>
+        </section>
+
+        <div class="split">
+            <section class="card table-card">
+                <div class="card-title">최근 결제 내역</div>
+                <div class="card-desc">최신 5건입니다. 전체 내역은 수강권/결제 관리에서 확인하세요.</div>
+                <div class="table-scroll" style="margin-top: 16px;">
+                    <table>
+                        <thead>
+                        <tr>
+                            <th>회원</th>
+                            <th class="num">횟수</th>
+                            <th class="num">금액</th>
+                            <th>상태</th>
+                            <th>요청 시각</th>
+                        </tr>
+                        </thead>
+                        <tbody id="recentPayments">
+                        <tr><td colspan="5" class="empty">불러오는 중...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section class="card">
+                <div class="card-title">바로가기</div>
+                <div class="card-body quick">
+                    <a href="/admin-payment.html">💳 결제 관리<small>결제 내역 조회</small></a>
+                    <a href="/admin-schedule.html">🗓️ 수업 스케줄<small>전체 수업 현황</small></a>
+                    <a href="/admin-user.html">👥 회원 관리<small>회원 조회·수강권 발급</small></a>
+                    <a href="/admin-settings.html">⚙️ 설정<small>화면 기본값</small></a>
+                </div>
+            </section>
+        </div>
+
+        <div class="message error" id="errorMessage"></div>
+    </main>
+</div>
+
+<script src="/assets/js/common.js"></script>
+<script src="/assets/js/console.js"></script>
+<script src="/assets/js/admin.js"></script>
+<script>
+    async function loadDashboard() {
+        const error = document.getElementById('errorMessage');
+        error.textContent = '';
+        try {
+            const [payments, users, schedules] = await Promise.all([
+                adminRequest('/api/admin/payments?page=0&size=5'),
+                adminRequest('/admin/users'),
+                adminRequest('/api/admin/schedules')
+            ]);
+
+            document.getElementById('statUsers').innerHTML = `${users.length.toLocaleString()}<small>명</small>`;
+            document.getElementById('statPaid').innerHTML = `${payments.summary.paid.toLocaleString()}<small>건</small>`;
+            document.getElementById('statReady').innerHTML = `${payments.summary.ready.toLocaleString()}<small>건</small>`;
+            document.getElementById('statSchedules').innerHTML = `${schedules.length.toLocaleString()}<small>건</small>`;
+
+            const body = document.getElementById('recentPayments');
+            body.innerHTML = payments.content.length
+                ? payments.content.map(payment => `
+                    <tr>
+                        <td>${escapeHtml(payment.userName)}<div class="muted mono">${escapeHtml(payment.userEmail)}</div></td>
+                        <td class="num">${payment.ticketCount}회</td>
+                        <td class="num">${payment.amount.toLocaleString()}원</td>
+                        <td>${renderBadge(PAYMENT_STATUS_BADGE, payment.status)}</td>
+                        <td class="muted">${formatDateTime(payment.createdAt)}</td>
+                    </tr>`).join('')
+                : '<tr><td colspan="5" class="empty">결제 내역이 없습니다.</td></tr>';
+        } catch (e) {
+            document.getElementById('recentPayments').innerHTML =
+                '<tr><td colspan="5" class="empty">불러오지 못했습니다.</td></tr>';
+            error.textContent = e.message;
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        if (!initAdminPage('dashboard')) return;
+        loadDashboard();
+    });
+</script>
+</body>
+</html>
