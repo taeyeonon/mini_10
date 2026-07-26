@@ -59,7 +59,7 @@ function hasRole(...roles) {
 function getHomePathByRole() {
   if (hasRole('ADMIN')) return '/admin-dashboard.html';
   if (hasRole('TRAINER')) return '/trainer-dashboard.html';
-  if (hasRole('CUSTOMER')) return '/customer.html';
+  if (hasRole('CUSTOMER')) return '/customer-dashboard.html';
   return '/board.html';
 }
 
