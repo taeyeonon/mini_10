@@ -9,7 +9,7 @@ const CUSTOMER_MENUS = [
 /** CUSTOMER 가드 + 회원 사이드바 렌더링. ADMIN 도 열람할 수 있다. */
 function initCustomerPage(activeKey) {
   return initConsolePage({
-    brand: '🏋️ FitPass Member',
+    brand: '🏋️ Fit Manager Member',
     roleLabel: '회원',
     roles: ['CUSTOMER', 'ADMIN'],
     menus: CUSTOMER_MENUS,

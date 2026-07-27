@@ -11,7 +11,7 @@ const ADMIN_MENUS = [
 /** ADMIN 가드 + 관리자 사이드바 렌더링. */
 function initAdminPage(activeKey) {
   return initConsolePage({
-    brand: '🏋️ FitPass Admin',
+    brand: '🏋️ Fit Manager Admin',
     roleLabel: '관리자',
     roles: ['ADMIN'],
     menus: ADMIN_MENUS,
