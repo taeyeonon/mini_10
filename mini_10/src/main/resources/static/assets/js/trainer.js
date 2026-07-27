@@ -11,7 +11,7 @@ const TRAINER_MENUS = [
 /** TRAINER 가드 + 트레이너 사이드바 렌더링. ADMIN 도 열람할 수 있다. */
 function initTrainerPage(activeKey) {
   return initConsolePage({
-    brand: '🏋️ FitPass Trainer',
+    brand: '🏋️ Fit Manager Trainer',
     roleLabel: '트레이너',
     roles: ['TRAINER', 'ADMIN'],
     menus: TRAINER_MENUS,

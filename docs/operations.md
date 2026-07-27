@@ -9,6 +9,13 @@
 
 공유 테스트 클라이언트 키는 기본 설정되어 있습니다. 시크릿 키는 로그, 화면, README, Git 기록에 남기지 않으며 테스트 키와 운영 키를 분리합니다.
 
+실행 도구별 등록 위치:
+
+- IntelliJ: `Run → Edit Configurations → Mini10Application → Environment variables`
+- STS: `Run → Run Configurations → Spring Boot App → Mini10Application → Environment`
+
+두 환경 모두 `TOSS_SECRET_KEY` 이름으로 등록하고 실행 중인 서버를 완전히 종료한 뒤 다시 실행합니다.
+
 ## 기본 시연 시나리오
 
 1. 관리자 로그인 → 회원 선택 → 수강권 수동 발급

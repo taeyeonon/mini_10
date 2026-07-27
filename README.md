@@ -1,6 +1,6 @@
-# mini_10 헬스/PT 예약 시스템
+# Fit Manager
 
-LG유플러스 유레카 백엔드 과정 미니프로젝트 10조의 헬스 PT·필라테스 수업 예약 및 수강권 관리 시스템입니다.
+LG유플러스 유레카 백엔드 과정 미니프로젝트 10조의 헬스 PT·필라테스 수업 예약 및 수강권 관리 시스템 `Fit Manager`입니다.
 
 ## 주요 기능
 
@@ -32,13 +32,27 @@ CREATE DATABASE mini_10 CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 ### 2. 토스 테스트 키 설정
 
-공유 테스트 클라이언트 키는 프로젝트에 기본 설정되어 있습니다. 결제 승인에 필요한 서버 시크릿 키만 IntelliJ 실행 구성 또는 OS 환경변수에 설정합니다.
+공유 테스트 클라이언트 키는 프로젝트에 기본 설정되어 있습니다. 결제 승인에 필요한 서버 시크릿 키는 팀 내부에서 별도로 전달받아 실행 환경변수에 설정합니다.
 
 ```text
 TOSS_SECRET_KEY=test_sk_...
 ```
 
-필요하면 `TOSS_CLIENT_KEY` 환경변수로 기본 클라이언트 키를 덮어쓸 수 있습니다. 토스 결제를 사용하지 않는 기능은 시크릿 키 없이도 실행할 수 있습니다.
+#### IntelliJ 설정
+
+1. `Run → Edit Configurations...`를 선택합니다.
+2. `Mini10Application` 실행 구성을 선택합니다.
+3. `Environment variables`에 `TOSS_SECRET_KEY=전달받은_테스트_시크릿_키`를 추가합니다.
+4. `Apply → OK`를 누르고 실행 중인 서버를 완전히 종료한 뒤 다시 실행합니다.
+
+#### STS(Spring Tool Suite) 설정
+
+1. `Run → Run Configurations...`를 선택합니다.
+2. `Spring Boot App → Mini10Application → Environment` 탭으로 이동합니다.
+3. `Add...`를 눌러 이름은 `TOSS_SECRET_KEY`, 값은 전달받은 테스트 시크릿 키로 입력합니다.
+4. `Apply → Run`을 누릅니다. 기존 서버가 실행 중이었다면 완전히 종료한 뒤 다시 실행합니다.
+
+시크릿 키는 `application.properties`나 Git에 추가하지 않습니다. 필요하면 `TOSS_CLIENT_KEY` 환경변수로 기본 클라이언트 키를 덮어쓸 수 있습니다. 토스 결제를 제외한 기능은 시크릿 키 없이도 실행할 수 있습니다.
 
 ### 3. 애플리케이션 실행
 
