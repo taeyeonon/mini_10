@@ -1,6 +1,7 @@
 package com.mycom.myapp.reservation.repository;
 
 import com.mycom.myapp.reservation.entity.Reservation;
+import com.mycom.myapp.reservation.entity.ReservationStatus;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -10,6 +11,9 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
     Optional<Reservation> findByMemberIdAndTrainerScheduleId(Long memberId, Long trainerScheduleId);
 
     boolean existsByTrainerScheduleId(Long trainerScheduleId);
+
+    boolean existsByTrainerScheduleIdAndStatus(
+            Long trainerScheduleId, ReservationStatus status);
 
     Optional<Reservation> findByIdAndMemberId(Long reservationId, Long memberId);
 

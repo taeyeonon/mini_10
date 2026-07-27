@@ -10,6 +10,7 @@ import com.mycom.myapp.schedule.dto.ScheduleRefreshResponse;
 import com.mycom.myapp.schedule.dto.ScheduleResponse;
 import com.mycom.myapp.schedule.dto.ScheduleUpdateRequest;
 import com.mycom.myapp.reservation.repository.ReservationRepository;
+import com.mycom.myapp.reservation.entity.ReservationStatus;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.springframework.stereotype.Service;
@@ -114,9 +115,10 @@ public class TrainerScheduleService {
             throw new InvalidOperationException("이미 취소된 일정입니다.");
         }
         if (schedule.getReservedCount() > 0
-                || reservationRepository.existsByTrainerScheduleId(schedule.getId())) {
+                || reservationRepository.existsByTrainerScheduleIdAndStatus(
+                        schedule.getId(), ReservationStatus.CONFIRMED)) {
             throw new InvalidOperationException(
-                    "예약자가 있는 일정은 수강권 복구 정책이 필요하므로 취소할 수 없습니다.");
+                    "현재 예약자가 있는 일정은 먼저 예약 취소 처리가 필요합니다.");
         }
         schedule.cancel();
         return ScheduleResponse.from(schedule);
