@@ -5,6 +5,30 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>관리자 - 회원 관리</title>
     <link rel="stylesheet" href="/assets/css/console.css">
+    <style>
+        .role-select { padding: 6px 10px; border: 1px solid #d7dce3; border-radius: 8px; background: #fff; font-size: 13px; cursor: pointer; }
+        .role-select.is-changed { border-color: #f59e0b; background: #fff7ed; box-shadow: 0 0 0 2px rgba(245,158,11,.18); font-weight: 600; }
+        .role-cell-hint { display: block; margin-top: 4px; font-size: 11px; color: #b26a00; font-weight: 600; }
+        .save-bar { display: none; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; padding: 12px 16px; border: 1px solid #fcd9a5; background: #fff7ed; border-radius: 12px; }
+        .save-bar.active { display: flex; }
+        .save-bar-text { font-size: 14px; color: #92400e; font-weight: 600; }
+        .save-bar-actions { display: flex; gap: 8px; }
+        .modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(15,42,46,.45); z-index: 1000; align-items: center; justify-content: center; padding: 20px; }
+        .modal-backdrop.active { display: flex; }
+        .modal { background: #fff; border-radius: 16px; max-width: 520px; width: 100%; max-height: 80vh; overflow: auto; box-shadow: 0 20px 50px rgba(0,0,0,.25); }
+        .modal-head { padding: 20px 24px 12px; }
+        .modal-head h3 { margin: 0; font-size: 18px; }
+        .modal-head p { margin: 6px 0 0; font-size: 13px; color: #64756f; }
+        .modal-body { padding: 8px 24px; }
+        .change-list { list-style: none; margin: 0; padding: 0; }
+        .change-list li { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid #eef2f1; font-size: 14px; }
+        .change-list li:last-child { border-bottom: none; }
+        .change-list .who { flex: 1; }
+        .change-list .who .uid { color: #94a3b8; margin-right: 6px; font-size: 12px; }
+        .change-arrow { color: #94a3b8; }
+        .modal-msg { padding: 0 24px; color: #dc2626; font-size: 13px; min-height: 18px; }
+        .modal-foot { padding: 12px 24px 22px; display: flex; justify-content: flex-end; gap: 8px; }
+    </style>
 </head>
 <body>
 <div class="layout">
@@ -86,6 +110,14 @@
             <button class="btn-ghost" id="refreshButton">새로고침</button>
         </section>
 
+        <div class="save-bar" id="saveBar">
+            <div class="save-bar-text" id="saveBarText">변경된 역할이 없습니다.</div>
+            <div class="save-bar-actions">
+                <button class="btn-ghost" id="cancelRolesButton">변경 취소</button>
+                <button class="btn-primary" id="saveRolesButton">역할 변경 저장</button>
+            </div>
+        </div>
+
         <section class="card table-card">
             <div class="table-scroll">
                 <table>
@@ -109,18 +141,80 @@
     </main>
 </div>
 
+<div class="modal-backdrop" id="roleModal">
+    <div class="modal">
+        <div class="modal-head">
+            <h3>역할 변경 확인</h3>
+            <p>아래 <span id="modalCount">0</span>건의 역할을 변경합니다. 저장하시겠어요?</p>
+        </div>
+        <div class="modal-body">
+            <ul class="change-list" id="changeList"></ul>
+        </div>
+        <div class="modal-msg" id="modalMessage"></div>
+        <div class="modal-foot">
+            <button class="btn-ghost" id="modalCancel">취소</button>
+            <button class="btn-primary" id="modalConfirm">저장</button>
+        </div>
+    </div>
+</div>
+
 <script src="/assets/js/common.js"></script>
 <script src="/assets/js/console.js"></script>
 <script src="/assets/js/admin.js"></script>
 <script>
     // 전체 목록 API 라서 검색·페이징은 클라이언트에서 처리한다.
-    const state = { all: [], page: 0, size: loadAdminSettings().pageSize };
+    // pending: { [userId]: '바꿀 역할' } — 저장 전까지 클라이언트에만 담아 둔다.
+    const state = { all: [], page: 0, size: loadAdminSettings().pageSize, pending: {} };
+
+    const ROLE_OPTIONS = [['CUSTOMER', '회원'], ['TRAINER', '트레이너'], ['ADMIN', '관리자']];
+    const ROLE_KEYS = ROLE_OPTIONS.map(option => option[0]);
+
+    // 한 회원의 대표 역할(드롭다운 기준값). 회원당 하나의 역할만 사용한다.
+    function primaryRole(user) {
+        const roles = user.roles || [];
+        return roles.find(role => ROLE_KEYS.includes(role)) || roles[0] || 'CUSTOMER';
+    }
+
+    function roleLabel(role) {
+        return ROLE_BADGE[role]?.label || role;
+    }
+
+    function roleSelectHtml(user) {
+        const original = primaryRole(user);
+        const current = state.pending[user.id] ?? original;
+        const changed = current !== original;
+        const options = ROLE_OPTIONS.map(([value, label]) =>
+            `<option value="${value}"${value === current ? ' selected' : ''}>${label}</option>`).join('');
+        const hint = changed
+            ? `<span class="role-cell-hint">${escapeHtml(roleLabel(original))} → ${escapeHtml(roleLabel(current))} · 미저장</span>`
+            : '';
+        return `<select class="role-select${changed ? ' is-changed' : ''}" data-id="${user.id}" data-original="${original}">${options}</select>${hint}`;
+    }
+
+    // 저장 전 변경 목록: {id, name, from, to}
+    function changedList() {
+        return state.all
+            .filter(user => state.pending[user.id] !== undefined && state.pending[user.id] !== primaryRole(user))
+            .map(user => ({ id: user.id, name: user.name, from: primaryRole(user), to: state.pending[user.id] }));
+    }
+
+    function updateSaveBar() {
+        const changes = changedList();
+        const bar = document.getElementById('saveBar');
+        if (changes.length) {
+            bar.classList.add('active');
+            document.getElementById('saveBarText').textContent = `변경된 역할 ${changes.length}건 · 저장 전`;
+        } else {
+            bar.classList.remove('active');
+        }
+    }
 
     async function loadUsers() {
         const error = document.getElementById('errorMessage');
         error.textContent = '';
         try {
             state.all = await adminRequest('/admin/users');
+            state.pending = {};
             renderSummary();
             renderCustomerOptions();
             state.page = 0;
@@ -176,9 +270,7 @@
                     <td class="muted">#${user.id}</td>
                     <td>${escapeHtml(user.name)}</td>
                     <td class="mono">${escapeHtml(user.email)}</td>
-                    <td>${(user.roles || []).length
-                        ? user.roles.map(role => renderBadge(ROLE_BADGE, role)).join(' ')
-                        : '<span class="muted">-</span>'}</td>
+                    <td>${roleSelectHtml(user)}</td>
                 </tr>`).join('')
             : '<tr><td colspan="4" class="empty">조건에 맞는 회원이 없습니다.</td></tr>';
 
@@ -186,6 +278,57 @@
         document.getElementById('pageInfo').textContent = result.totalPages
             ? `전체 ${result.totalElements.toLocaleString()}명 · ${result.page + 1} / ${result.totalPages} 페이지`
             : '';
+        updateSaveBar();
+    }
+
+    // 역할 변경 확인 팝업 열기
+    function openRoleModal() {
+        const changes = changedList();
+        if (!changes.length) return;
+        document.getElementById('modalCount').textContent = changes.length;
+        document.getElementById('modalMessage').textContent = '';
+        document.getElementById('changeList').innerHTML = changes.map(change => `
+            <li>
+                <span class="who"><span class="uid">#${change.id}</span>${escapeHtml(change.name)}</span>
+                ${renderBadge(ROLE_BADGE, change.from)}
+                <span class="change-arrow">→</span>
+                ${renderBadge(ROLE_BADGE, change.to)}
+            </li>`).join('');
+        document.getElementById('roleModal').classList.add('active');
+    }
+
+    function closeRoleModal() {
+        document.getElementById('roleModal').classList.remove('active');
+    }
+
+    async function saveRoles() {
+        const changes = changedList();
+        if (!changes.length) return;
+        const confirmButton = document.getElementById('modalConfirm');
+        const modalMessage = document.getElementById('modalMessage');
+        modalMessage.textContent = '';
+        confirmButton.disabled = true;
+        try {
+            state.all = await adminRequest('/admin/users/roles', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(changes.map(change => ({ id: change.id, role: change.to })))
+            });
+            state.pending = {};
+            closeRoleModal();
+            renderSummary();
+            renderCustomerOptions();
+            render();
+
+            const banner = document.getElementById('errorMessage');
+            banner.className = 'message success';
+            banner.textContent = `역할 ${changes.length}건을 변경했습니다.`;
+            setTimeout(() => { banner.className = 'message error'; banner.textContent = ''; }, 4000);
+        } catch (e) {
+            modalMessage.textContent = e.message;
+        } finally {
+            confirmButton.disabled = false;
+        }
     }
 
     async function issueTicket() {
@@ -252,6 +395,29 @@
         document.getElementById('searchButton').addEventListener('click', search);
         document.getElementById('refreshButton').addEventListener('click', loadUsers);
         document.getElementById('role').addEventListener('change', search);
+
+        // 역할 드롭다운 변경(위임): pending 에 담고 다시 렌더링해 미저장 표시.
+        document.getElementById('tableBody').addEventListener('change', event => {
+            const select = event.target.closest('.role-select');
+            if (!select) return;
+            const id = Number(select.dataset.id);
+            if (select.value === select.dataset.original) {
+                delete state.pending[id];
+            } else {
+                state.pending[id] = select.value;
+            }
+            render();
+        });
+        document.getElementById('saveRolesButton').addEventListener('click', openRoleModal);
+        document.getElementById('cancelRolesButton').addEventListener('click', () => {
+            state.pending = {};
+            render();
+        });
+        document.getElementById('modalConfirm').addEventListener('click', saveRoles);
+        document.getElementById('modalCancel').addEventListener('click', closeRoleModal);
+        document.getElementById('roleModal').addEventListener('click', event => {
+            if (event.target.id === 'roleModal') closeRoleModal();
+        });
         document.getElementById('keyword').addEventListener('keydown', event => {
             if (event.key === 'Enter') search();
         });
