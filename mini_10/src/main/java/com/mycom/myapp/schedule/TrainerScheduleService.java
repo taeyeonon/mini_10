@@ -10,6 +10,7 @@ import com.mycom.myapp.schedule.dto.ScheduleRefreshResponse;
 import com.mycom.myapp.schedule.dto.ScheduleResponse;
 import com.mycom.myapp.schedule.dto.ScheduleUpdateRequest;
 import com.mycom.myapp.reservation.repository.ReservationRepository;
+import com.mycom.myapp.reservation.entity.ReservationStatus;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.springframework.stereotype.Service;
@@ -50,6 +51,25 @@ public class TrainerScheduleService {
         return scheduleRepository.findAllByTrainerIdAndArchivedFalseOrderByStartTimeAsc(trainer.getId()).stream()
                 .map(ScheduleResponse::from)
                 .toList();
+    }
+
+    /** 관리자용 전체 수업 조회. 트레이너/상태/과거 여부를 가리지 않고 모두 내려준다. */
+    @Transactional(readOnly = true)
+    public List<ScheduleResponse> findAllForAdmin() {
+        return scheduleRepository.findAllByArchivedFalseOrderByStartTimeDesc().stream()
+                .map(ScheduleResponse::from)
+                .toList();
+    }
+
+    /**
+     * 종료된 OPEN 수업을 COMPLETED 로 일괄 전환한다. (스케줄러가 주기적으로 호출)
+     * 벌크 UPDATE 한 번으로 처리하므로 대상 건수와 무관하게 비용이 일정하다.
+     *
+     * @return 전환된 수업 수
+     */
+    @Transactional
+    public int completeEndedSchedules() {
+        return scheduleRepository.markCompletedBefore(LocalDateTime.now());
     }
 
     @Transactional(readOnly = true)
@@ -95,9 +115,10 @@ public class TrainerScheduleService {
             throw new InvalidOperationException("이미 취소된 일정입니다.");
         }
         if (schedule.getReservedCount() > 0
-                || reservationRepository.existsByTrainerScheduleId(schedule.getId())) {
+                || reservationRepository.existsByTrainerScheduleIdAndStatus(
+                        schedule.getId(), ReservationStatus.CONFIRMED)) {
             throw new InvalidOperationException(
-                    "예약자가 있는 일정은 수강권 복구 정책이 필요하므로 취소할 수 없습니다.");
+                    "현재 예약자가 있는 일정은 먼저 예약 취소 처리가 필요합니다.");
         }
         schedule.cancel();
         return ScheduleResponse.from(schedule);

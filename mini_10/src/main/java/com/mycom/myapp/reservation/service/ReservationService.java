@@ -6,9 +6,11 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.mycom.myapp.common.ForbiddenOperationException;
 import com.mycom.myapp.common.InvalidOperationException;
 import com.mycom.myapp.common.ResourceNotFoundException;
 import com.mycom.myapp.reservation.dto.ReservationResponse;
+import com.mycom.myapp.reservation.dto.ScheduleReservationResponse;
 import com.mycom.myapp.reservation.entity.Reservation;
 import com.mycom.myapp.reservation.entity.ReservationStatus;
 import com.mycom.myapp.reservation.repository.ReservationRepository;
@@ -96,6 +98,19 @@ public class ReservationService {
         return reservationRepository.findAllByMemberIdOrderByReservedAtDesc(memberId)
                 .stream()
                 .map(ReservationResponse::from)
+                .toList();
+    }
+
+    /** 트레이너가 본인 수업의 예약자 명단을 조회한다. 남의 수업은 볼 수 없다. */
+    public List<ScheduleReservationResponse> findByScheduleForTrainer(String trainerEmail, Long scheduleId) {
+        TrainerSchedule schedule = scheduleRepository.findById(scheduleId)
+                .orElseThrow(() -> new ResourceNotFoundException("수업 일정을 찾을 수 없습니다."));
+        if (!schedule.getTrainer().getEmail().equals(trainerEmail)) {
+            throw new ForbiddenOperationException("본인의 수업만 조회할 수 있습니다.");
+        }
+        return reservationRepository.findAllByTrainerScheduleIdOrderByReservedAtAsc(scheduleId)
+                .stream()
+                .map(ScheduleReservationResponse::from)
                 .toList();
     }
 

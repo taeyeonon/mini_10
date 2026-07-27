@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 import com.mycom.myapp.common.ForbiddenOperationException;
 import com.mycom.myapp.common.InvalidOperationException;
 import com.mycom.myapp.reservation.repository.ReservationRepository;
+import com.mycom.myapp.reservation.entity.ReservationStatus;
 import com.mycom.myapp.schedule.dto.ScheduleCreateRequest;
 import com.mycom.myapp.schedule.dto.ScheduleRefreshResponse;
 import com.mycom.myapp.schedule.dto.ScheduleResponse;
@@ -110,15 +111,29 @@ class TrainerScheduleServiceTest {
     }
 
     @Test
-    void scheduleWithReservationHistoryCannotBeCancelled() {
+    void scheduleWithConfirmedReservationCannotBeCancelled() {
         User trainer = trainer(1L, "trainer@example.com");
         TrainerSchedule schedule = schedule(trainer);
         mockOwnedSchedule(trainer, schedule);
-        when(reservationRepository.existsByTrainerScheduleId(schedule.getId())).thenReturn(true);
+        when(reservationRepository.existsByTrainerScheduleIdAndStatus(
+                schedule.getId(), ReservationStatus.CONFIRMED)).thenReturn(true);
 
         assertThatThrownBy(() -> service.cancel(trainer.getEmail(), schedule.getId()))
                 .isInstanceOf(InvalidOperationException.class)
-                .hasMessageContaining("수강권 복구 정책");
+                .hasMessageContaining("현재 예약자");
+    }
+
+    @Test
+    void scheduleWithOnlyCancelledReservationHistoryCanBeCancelled() {
+        User trainer = trainer(1L, "trainer@example.com");
+        TrainerSchedule schedule = schedule(trainer);
+        mockOwnedSchedule(trainer, schedule);
+        when(reservationRepository.existsByTrainerScheduleIdAndStatus(
+                schedule.getId(), ReservationStatus.CONFIRMED)).thenReturn(false);
+
+        ScheduleResponse response = service.cancel(trainer.getEmail(), schedule.getId());
+
+        assertThat(response.status()).isEqualTo(ScheduleStatus.CANCELLED);
     }
 
     @Test

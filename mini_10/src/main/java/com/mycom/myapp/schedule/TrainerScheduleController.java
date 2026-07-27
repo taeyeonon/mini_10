@@ -5,6 +5,8 @@ import com.mycom.myapp.schedule.dto.ScheduleRefreshResponse;
 import com.mycom.myapp.schedule.dto.ScheduleResponse;
 import com.mycom.myapp.schedule.dto.ScheduleUpdateRequest;
 import com.mycom.myapp.config.MyUserDetails;
+import com.mycom.myapp.reservation.dto.ScheduleReservationResponse;
+import com.mycom.myapp.reservation.service.ReservationService;
 import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.List;
@@ -24,9 +26,14 @@ import org.springframework.web.bind.annotation.RestController;
 public class TrainerScheduleController {
 
     private final TrainerScheduleService scheduleService;
+    private final ReservationService reservationService;
 
-    public TrainerScheduleController(TrainerScheduleService scheduleService) {
+    public TrainerScheduleController(
+            TrainerScheduleService scheduleService,
+            ReservationService reservationService
+    ) {
         this.scheduleService = scheduleService;
+        this.reservationService = reservationService;
     }
 
     @PostMapping
@@ -48,7 +55,7 @@ public class TrainerScheduleController {
     @PutMapping("/{scheduleId}")
     public ScheduleResponse update(
             @AuthenticationPrincipal MyUserDetails userDetails,
-            @PathVariable Long scheduleId,
+            @PathVariable("scheduleId") Long scheduleId,
             @Valid @RequestBody ScheduleUpdateRequest request
     ) {
         return scheduleService.update(userDetails.getEmail(), scheduleId, request);
@@ -57,7 +64,7 @@ public class TrainerScheduleController {
     @PatchMapping("/{scheduleId}/cancel")
     public ScheduleResponse cancel(
             @AuthenticationPrincipal MyUserDetails userDetails,
-            @PathVariable Long scheduleId
+            @PathVariable("scheduleId") Long scheduleId
     ) {
         return scheduleService.cancel(userDetails.getEmail(), scheduleId);
     }
@@ -65,7 +72,7 @@ public class TrainerScheduleController {
     @PatchMapping("/{scheduleId}/restore")
     public ScheduleResponse restore(
             @AuthenticationPrincipal MyUserDetails userDetails,
-            @PathVariable Long scheduleId
+            @PathVariable("scheduleId") Long scheduleId
     ) {
         return scheduleService.restore(userDetails.getEmail(), scheduleId);
     }
@@ -75,5 +82,14 @@ public class TrainerScheduleController {
             @AuthenticationPrincipal MyUserDetails userDetails
     ) {
         return scheduleService.refresh(userDetails.getEmail());
+    }
+
+    /** 내 수업의 예약자 명단. 남의 수업이면 403. */
+    @GetMapping("/{scheduleId}/reservations")
+    public List<ScheduleReservationResponse> reservations(
+            @AuthenticationPrincipal MyUserDetails userDetails,
+            @PathVariable("scheduleId") Long scheduleId
+    ) {
+        return reservationService.findByScheduleForTrainer(userDetails.getEmail(), scheduleId);
     }
 }

@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>회원 - 예약</title>
+    <link rel="stylesheet" href="/assets/css/console.css">
+    <style>
+        .section-gap { margin-bottom: 20px; }
+        .card-title .btn-sm { margin-left: 10px; }
+    </style>
+</head>
+<body>
+<div class="layout">
+    <aside class="sidebar"></aside>
+
+    <main class="main">
+        <div class="page-header">
+            <div>
+                <h1>예약</h1>
+                <div class="today"></div>
+            </div>
+            <div class="profile">
+                <div class="avatar">C</div>
+                <div class="profile-text">
+                    <div class="role">회원</div>
+                    <div class="email"></div>
+                </div>
+                <button class="btn-ghost" onclick="jwtLogout()">로그아웃</button>
+            </div>
+        </div>
+
+        <section class="card table-card section-gap">
+            <div class="card-title">내 예약 내역
+                <button class="btn-primary btn-sm" onclick="loadReservations()">새로고침</button>
+            </div>
+            <div class="card-desc">확정된 예약은 수업 시작 전까지 취소할 수 있습니다. 취소하면 수강권이 복구됩니다.</div>
+            <div class="table-scroll" style="margin-top: 16px;">
+                <table>
+                    <thead>
+                    <tr>
+                        <th>예약</th>
+                        <th>수업 ID</th>
+                        <th>수강권 ID</th>
+                        <th>예약 시각</th>
+                        <th>상태</th>
+                        <th></th>
+                    </tr>
+                    </thead>
+                    <tbody id="reservationList">
+                    <tr><td colspan="6" class="empty">불러오는 중...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="message error" id="reservationError"></p>
+        </section>
+
+        <section class="card table-card">
+            <div class="card-title">예약 가능한 수업
+                <button class="btn-primary btn-sm" onclick="loadSchedules()">새로고침</button>
+            </div>
+            <div class="card-desc">예약하면 수강권이 자동으로 1회 차감됩니다.</div>
+            <div class="table-scroll" style="margin-top: 16px;">
+                <table>
+                    <thead>
+                    <tr>
+                        <th>이름</th>
+                        <th>시작시간</th>
+                        <th>종료시간</th>
+                        <th class="num">정원</th>
+                        <th class="num">잔여</th>
+                        <th>예약 현황</th>
+                        <th></th>
+                    </tr>
+                    </thead>
+                    <tbody id="scheduleList">
+                    <tr><td colspan="7" class="empty">불러오는 중...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="message error" id="scheduleError"></p>
+        </section>
+    </main>
+</div>
+
+<script src="/assets/js/common.js"></script>
+<script src="/assets/js/console.js"></script>
+<script src="/assets/js/customer.js"></script>
+<script>
+    async function loadReservations() {
+        const error = document.getElementById('reservationError');
+        error.textContent = '';
+        try {
+            const reservations = await customerRequest('/customer/reservations/me');
+            document.getElementById('reservationList').innerHTML = reservations.length
+                ? reservations.map(reservation => `
+                    <tr>
+                        <td>예약 #${reservation.id}</td>
+                        <td class="mono">${reservation.trainerScheduleId}</td>
+                        <td class="mono">${reservation.ticketId}</td>
+                        <td class="muted">${formatDateTime(reservation.reservedAt)}</td>
+                        <td>${renderBadge(RESERVATION_STATUS_BADGE, reservation.status)}</td>
+                        <td class="num">${reservation.status === 'CONFIRMED'
+                            ? `<button class="btn-danger btn-sm" onclick="cancelReservation(${reservation.id})">예약 취소</button>` : ''}</td>
+                    </tr>`).join('')
+                : '<tr><td colspan="6" class="empty">예약 내역이 없습니다.</td></tr>';
+        } catch (e) {
+            document.getElementById('reservationList').innerHTML =
+                '<tr><td colspan="6" class="empty">불러오지 못했습니다.</td></tr>';
+            error.textContent = e.message;
+        }
+    }
+
+    async function loadSchedules() {
+        const error = document.getElementById('scheduleError');
+        error.textContent = '';
+        try {
+            const schedules = await customerRequest('/api/schedules');
+            document.getElementById('scheduleList').innerHTML = schedules.length
+                ? schedules.map(schedule => {
+                    const disabled = schedule.full || schedule.status !== 'OPEN';
+                    return `
+                    <tr>
+                        <td>${escapeHtml(schedule.trainerName)} 트레이너</td>
+                        <td class="muted">${formatDateTime(schedule.startTime)}</td>
+                        <td class="muted">${formatDateTime(schedule.endTime)}</td>
+                        <td class="num">${schedule.capacity}명</td>
+                        <td class="num">${schedule.availableCount}명</td>
+                        <td>${renderGauge(schedule.reservedCount, schedule.capacity)}</td>
+                        <td class="num"><button class="btn-primary btn-sm" ${disabled ? 'disabled' : ''}
+                            onclick="reserve(${schedule.id})">${disabled ? '예약 불가' : '예약'}</button></td>
+                    </tr>`;
+                }).join('')
+                : '<tr><td colspan="7" class="empty">예약 가능한 수업이 없습니다.</td></tr>';
+        } catch (e) {
+            document.getElementById('scheduleList').innerHTML =
+                '<tr><td colspan="7" class="empty">불러오지 못했습니다.</td></tr>';
+            error.textContent = e.message;
+        }
+    }
+
+    async function reserve(scheduleId) {
+        if (!confirm('이 수업을 예약할까요? 수강권이 1회 차감됩니다.')) return;
+        try {
+            await customerRequest(`/customer/reservations/schedules/${scheduleId}`, { method: 'POST' });
+            alert('예약이 완료되었습니다.');
+            await Promise.all([loadReservations(), loadSchedules()]);
+        } catch (e) { alert(e.message); }
+    }
+
+    async function cancelReservation(reservationId) {
+        if (!confirm('예약을 취소할까요? 수강권이 복구됩니다.')) return;
+        try {
+            await customerRequest(`/customer/reservations/${reservationId}/cancel`, { method: 'PATCH' });
+            alert('예약이 취소되었습니다.');
+            await Promise.all([loadReservations(), loadSchedules()]);
+        } catch (e) { alert(e.message); }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        if (!initCustomerPage('reservation')) return;
+        Promise.all([loadReservations(), loadSchedules()]);
+    });
+</script>
+</body>
+</html>

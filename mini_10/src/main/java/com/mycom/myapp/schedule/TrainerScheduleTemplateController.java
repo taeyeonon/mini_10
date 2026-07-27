@@ -46,7 +46,7 @@ public class TrainerScheduleTemplateController {
     @PatchMapping("/{templateId}/deactivate")
     public ScheduleTemplateResponse deactivate(
             @AuthenticationPrincipal MyUserDetails userDetails,
-            @PathVariable Long templateId
+            @PathVariable("templateId") Long templateId
     ) {
         return templateService.deactivate(userDetails.getEmail(), templateId);
     }

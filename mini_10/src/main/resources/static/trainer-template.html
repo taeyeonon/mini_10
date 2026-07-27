@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>트레이너 - 반복 일정</title>
+    <link rel="stylesheet" href="/assets/css/console.css">
+</head>
+<body>
+<div class="layout">
+    <aside class="sidebar"></aside>
+
+    <main class="main">
+        <div class="page-header">
+            <div>
+                <h1>요일별 반복 일정</h1>
+                <div class="today"></div>
+            </div>
+            <div class="profile">
+                <div class="avatar">T</div>
+                <div class="profile-text">
+                    <div class="role">트레이너</div>
+                    <div class="email"></div>
+                </div>
+                <button class="btn-ghost" onclick="jwtLogout()">로그아웃</button>
+            </div>
+        </div>
+
+        <section class="summary">
+            <div class="card">
+                <div class="label">전체 규칙</div>
+                <div class="value" id="statTotal">-<small>개</small></div>
+            </div>
+            <div class="card">
+                <div class="label">사용 중 <span class="badge badge-paid">ACTIVE</span></div>
+                <div class="value" id="statActive">-<small>개</small></div>
+            </div>
+            <div class="card">
+                <div class="label">비활성</div>
+                <div class="value" id="statInactive">-<small>개</small></div>
+            </div>
+        </section>
+
+        <section class="card" style="margin-bottom: 16px;">
+            <div class="card-title">🔁 반복 일정 등록</div>
+            <div class="card-desc">
+                규칙을 저장하면 적용 기간의 실제 수업이 한 번에 생성됩니다. 시간이 겹치면 전체가 취소됩니다.
+            </div>
+            <div class="card-body">
+                <div class="form-grid">
+                    <div>
+                        <label for="dayOfWeek">요일</label>
+                        <select id="dayOfWeek">
+                            <option value="MONDAY">월요일</option>
+                            <option value="TUESDAY">화요일</option>
+                            <option value="WEDNESDAY">수요일</option>
+                            <option value="THURSDAY">목요일</option>
+                            <option value="FRIDAY">금요일</option>
+                            <option value="SATURDAY">토요일</option>
+                            <option value="SUNDAY">일요일</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="startTime">시작 시간</label>
+                        <input type="time" id="startTime" value="10:00">
+                    </div>
+                    <div>
+                        <label for="endTime">종료 시간</label>
+                        <input type="time" id="endTime" value="11:00">
+                    </div>
+                    <div>
+                        <label for="capacity">정원</label>
+                        <input type="number" id="capacity" min="1" value="10">
+                    </div>
+                    <div>
+                        <label for="effectiveFrom">적용 시작일</label>
+                        <input type="date" id="effectiveFrom">
+                    </div>
+                    <div>
+                        <label for="effectiveTo">적용 종료일</label>
+                        <input type="date" id="effectiveTo">
+                    </div>
+                    <div>
+                        <button class="btn-primary" id="submitButton" style="width: 100%;">반복 일정 등록</button>
+                    </div>
+                </div>
+                <div class="message" id="formMessage"></div>
+            </div>
+        </section>
+
+        <section class="card table-card">
+            <div class="card-title">등록한 반복 규칙</div>
+            <div class="table-scroll" style="margin-top: 16px;">
+                <table>
+                    <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>요일</th>
+                        <th>시간</th>
+                        <th class="num">정원</th>
+                        <th>적용 기간</th>
+                        <th>상태</th>
+                        <th>관리</th>
+                    </tr>
+                    </thead>
+                    <tbody id="tableBody">
+                    <tr><td colspan="7" class="empty">불러오는 중...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="message error" id="errorMessage"></div>
+        </section>
+    </main>
+</div>
+
+<script src="/assets/js/common.js"></script>
+<script src="/assets/js/console.js"></script>
+<script src="/assets/js/trainer.js"></script>
+<script>
+    const state = { templates: [], busy: false };
+
+    async function loadTemplates() {
+        const error = document.getElementById('errorMessage');
+        error.textContent = '';
+        try {
+            state.templates = await trainerRequest('/api/trainer/schedule-templates');
+            renderSummary();
+            render();
+        } catch (e) {
+            document.getElementById('tableBody').innerHTML =
+                '<tr><td colspan="7" class="empty">반복 규칙을 불러오지 못했습니다.</td></tr>';
+            error.textContent = e.message;
+        }
+    }
+
+    function renderSummary() {
+        const active = state.templates.filter(template => template.active).length;
+        document.getElementById('statTotal').innerHTML = `${state.templates.length}<small>개</small>`;
+        document.getElementById('statActive').innerHTML = `${active}<small>개</small>`;
+        document.getElementById('statInactive').innerHTML = `${state.templates.length - active}<small>개</small>`;
+    }
+
+    function render() {
+        const body = document.getElementById('tableBody');
+        body.innerHTML = state.templates.length
+            ? state.templates.map(template => `
+                <tr>
+                    <td class="muted">#${template.id}</td>
+                    <td>${escapeHtml(DAY_OF_WEEK_LABEL[template.dayOfWeek] || template.dayOfWeek)}</td>
+                    <td>${formatTime(template.startTime)} ~ ${formatTime(template.endTime)}</td>
+                    <td class="num">${template.capacity}명</td>
+                    <td class="muted">${formatDate(template.effectiveFrom)} ~ ${template.effectiveTo
+                        ? formatDate(template.effectiveTo) : '기한 없음'}</td>
+                    <td>${template.active
+                        ? '<span class="badge badge-paid">사용 중</span>'
+                        : '<span class="badge badge-etc">비활성</span>'}</td>
+                    <td>
+                        ${template.active
+                            ? `<button class="btn-danger btn-sm" data-id="${template.id}">삭제</button>`
+                            : '<span class="muted">-</span>'}
+                    </td>
+                </tr>`).join('')
+            : '<tr><td colspan="7" class="empty">등록한 반복 규칙이 없습니다.</td></tr>';
+    }
+
+    function showFormMessage(text, isError = false) {
+        const message = document.getElementById('formMessage');
+        message.className = `message ${isError ? 'error' : 'success'}`;
+        message.textContent = text;
+    }
+
+    async function createTemplate() {
+        if (state.busy) return;
+        const startTime = document.getElementById('startTime').value;
+        const endTime = document.getElementById('endTime').value;
+        const capacity = Number(document.getElementById('capacity').value);
+        const effectiveFrom = document.getElementById('effectiveFrom').value;
+        const effectiveTo = document.getElementById('effectiveTo').value;
+
+        if (!startTime || !endTime || startTime >= endTime) {
+            showFormMessage('종료 시간은 시작 시간보다 뒤여야 합니다.', true);
+            return;
+        }
+        if (!capacity || capacity < 1) {
+            showFormMessage('정원은 1명 이상이어야 합니다.', true);
+            return;
+        }
+        if (!effectiveFrom) {
+            showFormMessage('적용 시작일을 입력해 주세요.', true);
+            return;
+        }
+        if (effectiveTo && effectiveTo < effectiveFrom) {
+            showFormMessage('적용 종료일은 시작일보다 뒤여야 합니다.', true);
+            return;
+        }
+
+        const button = document.getElementById('submitButton');
+        state.busy = true;
+        button.disabled = true;
+        try {
+            const data = await trainerRequest('/api/trainer/schedule-templates', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    dayOfWeek: document.getElementById('dayOfWeek').value,
+                    startTime, endTime, capacity, effectiveFrom,
+                    effectiveTo: effectiveTo || null
+                })
+            });
+            showFormMessage(`반복 규칙 #${data.id} 등록과 실제 수업 생성이 완료되었습니다.`);
+            await loadTemplates();
+        } catch (e) {
+            showFormMessage(e.message, true);
+        } finally {
+            state.busy = false;
+            button.disabled = false;
+        }
+    }
+
+    async function deactivate(templateId) {
+        if (!confirm(`반복 규칙 #${templateId} 을(를) 삭제할까요?\n이미 생성된 수업은 그대로 유지됩니다.`)) return;
+        try {
+            await trainerRequest(`/api/trainer/schedule-templates/${templateId}/deactivate`, { method: 'PATCH' });
+            await loadTemplates();
+        } catch (e) { alert(e.message); }
+    }
+
+    /** 적용 종료일 기본값: 시작일 + 1개월 */
+    function updateEffectiveEndDate() {
+        const startDate = document.getElementById('effectiveFrom').value;
+        if (!startDate) return;
+        const [year, month, day] = startDate.split('-').map(Number);
+        const lastDay = new Date(year, month + 1, 0).getDate();
+        document.getElementById('effectiveTo').value =
+            toDateInput(new Date(year, month, Math.min(day, lastDay)));
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        if (!initTrainerPage('template')) return;
+
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        document.getElementById('effectiveFrom').value = toDateInput(tomorrow);
+        updateEffectiveEndDate();
+
+        document.getElementById('effectiveFrom').addEventListener('change', updateEffectiveEndDate);
+        document.getElementById('submitButton').addEventListener('click', createTemplate);
+        document.getElementById('tableBody').addEventListener('click', event => {
+            const button = event.target.closest('button[data-id]');
+            if (button) deactivate(Number(button.dataset.id));
+        });
+
+        loadTemplates();
+    });
+</script>
+</body>
+</html>

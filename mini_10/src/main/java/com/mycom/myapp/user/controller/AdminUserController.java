@@ -15,6 +15,13 @@ public class AdminUserController {
 
     private final UserRepository userRepository;
 
+    /** 회원 관리 화면용 전체 사용자 목록 (역할 포함). */
+    @GetMapping
+    public List<AdminUserSummary> users() {
+        return userRepository.findAllByOrderByIdAsc()
+                .stream().map(AdminUserSummary::from).toList();
+    }
+
     @GetMapping("/customers")
     public List<AdminUserSummary> customers() {
         return userRepository.findDistinctByUserRolesNameOrderByNameAsc("CUSTOMER")

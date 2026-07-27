@@ -52,4 +52,7 @@ public class PaymentOrder {
     public int getTicketCount() { return ticketCount; }
     public long getAmount() { return amount; }
     public PaymentStatus getStatus() { return status; }
+    public String getPaymentKey() { return paymentKey; }
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public LocalDateTime getApprovedAt() { return approvedAt; }
 }

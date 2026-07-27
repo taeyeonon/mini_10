@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>회원 - 대시보드</title>
+    <link rel="stylesheet" href="/assets/css/console.css">
+    <style>
+        .section-gap { margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+<div class="layout">
+    <aside class="sidebar"></aside>
+
+    <main class="main">
+        <div class="page-header">
+            <div>
+                <h1>대시보드</h1>
+                <div class="today"></div>
+            </div>
+            <div class="profile">
+                <div class="avatar">C</div>
+                <div class="profile-text">
+                    <div class="role">회원</div>
+                    <div class="email"></div>
+                </div>
+                <button class="btn-ghost" onclick="jwtLogout()">로그아웃</button>
+            </div>
+        </div>
+
+        <section class="summary">
+            <div class="card">
+                <div class="label">남은 수강권 개수</div>
+                <div class="value" id="statTickets">-<small>매</small></div>
+            </div>
+            <div class="card">
+                <div class="label">내 예약 내역</div>
+                <div class="value" id="statReservations">-<small>건</small></div>
+            </div>
+        </section>
+
+        <section class="card table-card section-gap">
+            <div class="card-title">내 예약 내역</div>
+            <div class="card-desc">확정된 예약은 수업 시작 전까지 취소할 수 있습니다. 취소하면 수강권이 복구됩니다.</div>
+            <div class="table-scroll" style="margin-top: 16px;">
+                <table>
+                    <thead>
+                    <tr>
+                        <th>예약</th>
+                        <th>수업 ID</th>
+                        <th>수강권 ID</th>
+                        <th>예약 시각</th>
+                        <th>상태</th>
+                        <th></th>
+                    </tr>
+                    </thead>
+                    <tbody id="reservationList">
+                    <tr><td colspan="6" class="empty">불러오는 중...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="card">
+            <div class="card-title">오늘 예약 수업 시간</div>
+            <div class="card-desc">오늘 예정된 확정 예약만 표시됩니다.</div>
+            <div class="timeline" id="todayTimeline">
+                <p class="empty">불러오는 중...</p>
+            </div>
+        </section>
+
+        <div class="message error" id="errorMessage"></div>
+    </main>
+</div>
+
+<script src="/assets/js/common.js"></script>
+<script src="/assets/js/console.js"></script>
+<script src="/assets/js/customer.js"></script>
+<script>
+    async function loadDashboard() {
+        const error = document.getElementById('errorMessage');
+        error.textContent = '';
+        try {
+            const [tickets, reservations, schedules] = await Promise.all([
+                customerRequest('/customer/tickets/me'),
+                customerRequest('/customer/reservations/me'),
+                customerRequest('/api/schedules')
+            ]);
+
+            const remaining = tickets.reduce((sum, ticket) => sum + ticket.remainingCount, 0);
+            const total = tickets.reduce((sum, ticket) => sum + ticket.totalCount, 0);
+            document.getElementById('statTickets').innerHTML = `${remaining}/${total}<small>매</small>`;
+
+            const confirmed = reservations.filter(reservation => reservation.status === 'CONFIRMED');
+            document.getElementById('statReservations').innerHTML =
+                `${confirmed.length.toLocaleString()}<small>건</small>`;
+
+            renderReservations(reservations);
+            renderTodayTimeline(confirmed, schedules);
+        } catch (e) {
+            document.getElementById('reservationList').innerHTML =
+                '<tr><td colspan="6" class="empty">불러오지 못했습니다.</td></tr>';
+            document.getElementById('todayTimeline').innerHTML =
+                '<p class="empty">불러오지 못했습니다.</p>';
+            error.textContent = e.message;
+        }
+    }
+
+    function renderReservations(reservations) {
+        const body = document.getElementById('reservationList');
+        body.innerHTML = reservations.length
+            ? reservations.map(reservation => `
+                <tr>
+                    <td>예약 #${reservation.id}</td>
+                    <td class="mono">${reservation.trainerScheduleId}</td>
+                    <td class="mono">${reservation.ticketId}</td>
+                    <td class="muted">${formatDateTime(reservation.reservedAt)}</td>
+                    <td>${renderBadge(RESERVATION_STATUS_BADGE, reservation.status)}</td>
+                    <td class="num">${reservation.status === 'CONFIRMED'
+                        ? `<button class="btn-danger btn-sm" onclick="cancelReservation(${reservation.id})">예약 취소</button>` : ''}</td>
+                </tr>`).join('')
+            : '<tr><td colspan="6" class="empty">예약 내역이 없습니다.</td></tr>';
+    }
+
+    /** 확정 예약을 수업 정보와 이어 붙여 오늘 수업만 타임라인으로 그린다. */
+    function renderTodayTimeline(confirmed, schedules) {
+        const box = document.getElementById('todayTimeline');
+        const scheduleById = new Map(schedules.map(schedule => [schedule.id, schedule]));
+        const today = new Date().toDateString();
+        const todayClasses = confirmed
+            .map(reservation => scheduleById.get(reservation.trainerScheduleId))
+            .filter(schedule => schedule && new Date(schedule.startTime).toDateString() === today)
+            .sort((a, b) => a.startTime.localeCompare(b.startTime));
+
+        box.innerHTML = todayClasses.length
+            ? todayClasses.map(schedule => `
+                <div class="timeline-item">
+                    <div class="timeline-time">${formatTime(schedule.startTime)}<small>~ ${formatTime(schedule.endTime)}</small></div>
+                    <div class="timeline-body">
+                        <div class="title">${escapeHtml(schedule.trainerName)} 트레이너</div>
+                        <div class="meta">예약 ${schedule.reservedCount} / 정원 ${schedule.capacity}</div>
+                    </div>
+                </div>`).join('')
+            : '<p class="empty">오늘 예약된 수업이 없습니다.</p>';
+    }
+
+    async function cancelReservation(reservationId) {
+        if (!confirm('예약을 취소할까요? 수강권이 복구됩니다.')) return;
+        try {
+            await customerRequest(`/customer/reservations/${reservationId}/cancel`, { method: 'PATCH' });
+            alert('예약이 취소되었습니다.');
+            loadDashboard();
+        } catch (e) { alert(e.message); }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        if (!initCustomerPage('dashboard')) return;
+        loadDashboard();
+    });
+</script>
+</body>
+</html>

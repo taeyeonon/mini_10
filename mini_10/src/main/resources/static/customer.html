@@ -225,10 +225,7 @@
     }
 
     document.addEventListener('DOMContentLoaded', () => {
-            if (!getJwtToken()) {
-                location.href = '/login.html';
-                return;
-            }
+            if (!requireAuth('CUSTOMER', 'ADMIN')) return;
             renderCurrentUser();
         handlePaymentResult();
         Promise.all([loadTickets(), loadSchedules(), loadReservations()]);

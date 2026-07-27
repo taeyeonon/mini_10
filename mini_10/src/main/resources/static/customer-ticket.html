@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>회원 - 수강권</title>
+    <link rel="stylesheet" href="/assets/css/console.css">
+    <style>
+        .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; margin-bottom: 20px; }
+        @media (max-width: 1100px) { .two-col { grid-template-columns: 1fr; } }
+        .buy-form { display: flex; gap: 10px; align-items: flex-end; }
+        .buy-form .field { flex: 1; }
+        .buy-form select { width: 100%; }
+        .buy-price {
+            margin-top: 14px; padding: 14px 18px; border: 1px solid var(--border); border-radius: 12px;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .buy-price .desc { color: var(--text-weak); font-size: 13px; }
+        .buy-price .amount { font-weight: 700; font-size: 16px; font-variant-numeric: tabular-nums; }
+        .ticket-big { text-align: center; padding: 36px 22px 42px; }
+        .ticket-big .count { font-size: 44px; font-weight: 800; letter-spacing: -1px; }
+        .ticket-big .count small { font-size: 16px; font-weight: 500; color: var(--text-weak); margin-left: 6px; }
+        .ticket-big .hint { color: var(--text-weak); font-size: 13px; margin-top: 10px; }
+    </style>
+</head>
+<body>
+<div class="layout">
+    <aside class="sidebar"></aside>
+
+    <main class="main">
+        <div class="page-header">
+            <div>
+                <h1>수강권</h1>
+                <div class="today"></div>
+            </div>
+            <div class="profile">
+                <div class="avatar">C</div>
+                <div class="profile-text">
+                    <div class="role">회원</div>
+                    <div class="email"></div>
+                </div>
+                <button class="btn-ghost" onclick="jwtLogout()">로그아웃</button>
+            </div>
+        </div>
+
+        <div class="two-col">
+            <section class="card">
+                <div class="card-title">수강권 구매</div>
+                <div class="card-desc">테스트 가격 1회당 100원 · 결제 승인 완료 후 수강권이 자동 지급됩니다.</div>
+                <div class="card-body">
+                    <div class="buy-form">
+                        <div class="field">
+                            <label for="purchaseCount">수강권 선택</label>
+                            <select id="purchaseCount" onchange="updatePurchasePrice()">
+                                <option value="1">1회권</option>
+                                <option value="5">5회권</option>
+                                <option value="10" selected>10회권</option>
+                            </select>
+                        </div>
+                        <button class="btn-primary" id="paymentButton" onclick="purchaseTicket()">1,000원 결제하기</button>
+                    </div>
+                    <div class="buy-price">
+                        <span class="desc">결제 예정 금액</span>
+                        <span class="amount" id="purchasePrice">1,000원</span>
+                    </div>
+                    <p class="message error" id="paymentMessage" style="padding: 12px 0 0;"></p>
+                </div>
+            </section>
+
+            <section class="card ticket-big">
+                <div class="card-title" style="padding: 0 0 18px;">남은 수강권 개수</div>
+                <div class="count" id="statTickets">-<small>매</small></div>
+                <div class="hint">남은 횟수 / 전체 보유 횟수 · 예약하면 1회 차감됩니다.</div>
+            </section>
+        </div>
+
+        <section class="card table-card">
+            <div class="card-title">내 수강권</div>
+            <div class="card-desc">보유한 수강권 목록입니다.</div>
+            <div class="table-scroll" style="margin-top: 16px;">
+                <table>
+                    <thead>
+                    <tr>
+                        <th>수강권</th>
+                        <th class="num">잔여 횟수</th>
+                        <th class="num">전체 횟수</th>
+                        <th>사용 기간</th>
+                    </tr>
+                    </thead>
+                    <tbody id="ticketList">
+                    <tr><td colspan="4" class="empty">불러오는 중...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <div class="message error" id="errorMessage"></div>
+    </main>
+</div>
+
+<script src="https://js.tosspayments.com/v2/standard"></script>
+<script src="/assets/js/common.js"></script>
+<script src="/assets/js/console.js"></script>
+<script src="/assets/js/customer.js"></script>
+<script>
+    const PRICE_PER_TICKET = 100; // 테스트 가격 (customer.html 과 동일)
+
+    function updatePurchasePrice() {
+        const count = Number(document.getElementById('purchaseCount').value);
+        const price = `${(count * PRICE_PER_TICKET).toLocaleString()}원`;
+        document.getElementById('purchasePrice').textContent = price;
+        document.getElementById('paymentButton').textContent = `${price} 결제하기`;
+    }
+
+    async function purchaseTicket() {
+        const count = Number(document.getElementById('purchaseCount').value);
+        const button = document.getElementById('paymentButton');
+        button.disabled = true;
+        try {
+            const order = await customerRequest('/customer/payments/orders', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ticketCount: count})
+            });
+            const tossPayments = TossPayments(order.clientKey);
+            const payment = tossPayments.payment({customerKey: order.customerKey});
+            await payment.requestPayment({
+                method: 'CARD',
+                amount: {currency: 'KRW', value: order.amount},
+                orderId: order.orderId,
+                orderName: order.orderName,
+                customerName: order.customerName,
+                customerEmail: order.customerEmail,
+                successUrl: `${location.origin}/customer-ticket.html?payment=success`,
+                failUrl: `${location.origin}/customer-ticket.html?payment=fail`
+            });
+        } catch (e) {
+            document.getElementById('paymentMessage').textContent = e.message;
+            button.disabled = false;
+        }
+    }
+
+    /** 토스 결제창에서 돌아온 경우 결제 승인을 요청한다. */
+    async function handlePaymentResult() {
+        const params = new URLSearchParams(location.search);
+        if (params.get('payment') === 'success') {
+            try {
+                const result = await customerRequest('/customer/payments/confirm', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        paymentKey: params.get('paymentKey'),
+                        orderId: params.get('orderId'),
+                        amount: Number(params.get('amount'))
+                    })
+                });
+                alert(`${result.ticketCount}회 수강권 구매가 완료되었습니다.`);
+                history.replaceState({}, '', '/customer-ticket.html');
+                await loadTickets();
+            } catch (e) {
+                document.getElementById('paymentMessage').textContent = e.message;
+            }
+        } else if (params.get('payment') === 'fail') {
+            document.getElementById('paymentMessage').textContent =
+                params.get('message') || '결제가 취소되거나 실패했습니다.';
+            history.replaceState({}, '', '/customer-ticket.html');
+        }
+    }
+
+    async function loadTickets() {
+        const error = document.getElementById('errorMessage');
+        error.textContent = '';
+        try {
+            const tickets = await customerRequest('/customer/tickets/me');
+
+            const remaining = tickets.reduce((sum, ticket) => sum + ticket.remainingCount, 0);
+            const total = tickets.reduce((sum, ticket) => sum + ticket.totalCount, 0);
+            document.getElementById('statTickets').innerHTML = `${remaining}/${total}<small>매</small>`;
+
+            document.getElementById('ticketList').innerHTML = tickets.length
+                ? tickets.map(ticket => `
+                    <tr>
+                        <td>수강권 #${ticket.ticketId ?? ticket.id}</td>
+                        <td class="num">${ticket.remainingCount}회</td>
+                        <td class="num">${ticket.totalCount}회</td>
+                        <td class="muted">${formatDate(ticket.startDate)} ~ ${formatDate(ticket.endDate)}</td>
+                    </tr>`).join('')
+                : '<tr><td colspan="4" class="empty">보유한 수강권이 없습니다.</td></tr>';
+        } catch (e) {
+            document.getElementById('ticketList').innerHTML =
+                '<tr><td colspan="4" class="empty">불러오지 못했습니다.</td></tr>';
+            error.textContent = e.message;
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        if (!initCustomerPage('ticket')) return;
+        handlePaymentResult();
+        loadTickets();
+    });
+</script>
+</body>
+</html>

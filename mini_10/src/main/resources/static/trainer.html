@@ -2,263 +2,368 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>트레이너 일정 관리</title>
-    <style>
-        body { font-family: sans-serif; padding: 36px; background: #f7f8fa; }
-        .header { display: flex; justify-content: space-between; align-items: center; max-width: 760px; }
-        .header-actions { display: flex; align-items: center; gap: 9px; }
-        .current-user { color: #495057; font-size: 14px; font-weight: bold; }
-        .card { max-width: 720px; margin: 18px 0; padding: 22px; border: 1px solid #ddd; border-radius: 9px; background: white; }
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-        label { display: flex; flex-direction: column; gap: 5px; font-size: 14px; }
-        input, select { padding: 9px; border: 1px solid #bbb; border-radius: 5px; }
-        button { padding: 9px 15px; border: 0; border-radius: 5px; cursor: pointer; }
-        .primary { background: #e0a800; color: #212529; font-weight: bold; }
-        .secondary { background: #6c757d; color: white; }
-        .danger { background: #dc3545; color: white; }
-        .schedule { padding: 12px; margin-top: 9px; border: 1px solid #ddd; border-radius: 6px; }
-        .schedule.cancelled { opacity: 0.65; background: #f1f1f1; }
-        .message { margin-top: 12px; white-space: pre-wrap; }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>트레이너 - 수업 일정</title>
+    <link rel="stylesheet" href="/assets/css/console.css">
 </head>
 <body>
-<div class="header">
-    <h2>트레이너 일정 관리</h2>
-    <div class="header-actions">
-        <span class="current-user"></span>
-        <button class="secondary" onclick="location.href='/board.html'">메인으로</button>
-        <button class="danger" onclick="jwtLogout()">로그아웃</button>
-    </div>
-</div>
+<div class="layout">
+    <aside class="sidebar"></aside>
 
-<div class="card">
-    <h3>수업 일정 생성</h3>
-    <div class="grid">
-        <label>시작 시각<input id="startTime" type="datetime-local"></label>
-        <label>종료 시각<input id="endTime" type="datetime-local"></label>
-        <label>정원<input id="capacity" type="number" min="1" value="10"></label>
-    </div>
-    <p><button class="primary" onclick="createSchedule()">일정 생성</button></p>
-    <div id="createMessage" class="message"></div>
-</div>
+    <main class="main">
+        <div class="page-header">
+            <div>
+                <h1>수업 일정 관리</h1>
+                <div class="today"></div>
+            </div>
+            <div class="profile">
+                <div class="avatar">T</div>
+                <div class="profile-text">
+                    <div class="role">트레이너</div>
+                    <div class="email"></div>
+                </div>
+                <button class="btn-ghost" onclick="jwtLogout()">로그아웃</button>
+            </div>
+        </div>
 
-<div class="card">
-    <h3>요일별 반복 일정</h3>
-    <div class="grid">
-        <label>요일
-            <select id="dayOfWeek">
-                <option value="MONDAY">월요일</option><option value="TUESDAY">화요일</option>
-                <option value="WEDNESDAY">수요일</option><option value="THURSDAY">목요일</option>
-                <option value="FRIDAY">금요일</option><option value="SATURDAY">토요일</option>
-                <option value="SUNDAY">일요일</option>
+        <section class="summary">
+            <div class="card">
+                <div class="label">전체 일정</div>
+                <div class="value" id="statTotal">-<small>건</small></div>
+            </div>
+            <div class="card">
+                <div class="label">진행 예정 <span class="badge badge-paid">OPEN</span></div>
+                <div class="value" id="statOpen">-<small>건</small></div>
+            </div>
+            <div class="card">
+                <div class="label">정원 마감</div>
+                <div class="value" id="statFull">-<small>건</small></div>
+            </div>
+            <div class="card">
+                <div class="label">취소 <span class="badge badge-canceled">CANCELLED</span></div>
+                <div class="value" id="statCancelled">-<small>건</small></div>
+            </div>
+        </section>
+
+        <section class="card" style="margin-bottom: 16px;">
+            <div class="card-title" id="formTitle">🗓️ 수업 일정 생성</div>
+            <div class="card-desc" id="formDesc">시작 시각을 고르면 종료 시각이 1시간 뒤로 자동 설정됩니다.</div>
+            <div class="card-body">
+                <div class="form-grid">
+                    <div>
+                        <label for="startTime">시작 시각</label>
+                        <input type="datetime-local" id="startTime">
+                    </div>
+                    <div>
+                        <label for="endTime">종료 시각</label>
+                        <input type="datetime-local" id="endTime">
+                    </div>
+                    <div>
+                        <label for="capacity">정원</label>
+                        <input type="number" id="capacity" min="1" value="10">
+                    </div>
+                    <div class="row-actions">
+                        <button class="btn-primary" id="submitButton" style="flex: 1;">일정 생성</button>
+                        <button class="btn-ghost" id="cancelEditButton" style="display: none;">취소</button>
+                    </div>
+                </div>
+                <div class="message" id="formMessage"></div>
+            </div>
+        </section>
+
+        <section class="card toolbar">
+            <select id="status">
+                <option value="">전체 상태</option>
+                <option value="OPEN">오픈 (OPEN)</option>
+                <option value="COMPLETED">완료 (COMPLETED)</option>
+                <option value="CANCELLED">취소 (CANCELLED)</option>
             </select>
-        </label>
-        <label>시작 시간<input id="templateStart" type="time" value="10:00"></label>
-        <label>종료 시간<input id="templateEnd" type="time" value="11:00"></label>
-        <label>정원<input id="templateCapacity" type="number" min="1" value="10"></label>
-        <label>적용 시작일<input id="effectiveFrom" type="date"></label>
-        <label>적용 종료일<input id="effectiveTo" type="date"></label>
-    </div>
-    <p>
-        <button id="createTemplateButton" class="primary" onclick="createTemplate()">반복 일정 등록</button>
-    </p>
-    <div id="templateMessage" class="message"></div>
-</div>
+            <select id="period">
+                <option value="">전체 기간</option>
+                <option value="upcoming">진행 예정만</option>
+                <option value="past">지난 수업만</option>
+            </select>
+            <div style="flex: 1;"></div>
+            <button class="btn-ghost" id="reloadButton">새로고침</button>
+            <button class="btn-ghost" id="cleanupButton">취소 일정 정리</button>
+        </section>
 
-<div class="card">
-    <h3>내 수업 일정</h3>
-    <button id="refreshButton" class="primary" onclick="refreshSchedules()">일정 새로고침</button>
-    <div id="scheduleList"></div>
+        <section class="card table-card">
+            <div class="table-scroll">
+                <table>
+                    <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>시작</th>
+                        <th>종료</th>
+                        <th class="num">예약/정원</th>
+                        <th>정원 현황</th>
+                        <th>상태</th>
+                        <th>관리</th>
+                    </tr>
+                    </thead>
+                    <tbody id="tableBody">
+                    <tr><td colspan="7" class="empty">불러오는 중...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="pagination" id="pagination"></div>
+            <div class="page-info" id="pageInfo"></div>
+            <div class="message error" id="errorMessage"></div>
+        </section>
+    </main>
 </div>
 
 <script src="/assets/js/common.js"></script>
+<script src="/assets/js/console.js"></script>
+<script src="/assets/js/trainer.js"></script>
 <script>
-    async function request(url, options = {}) {
-        const response = await jwtFetch(url, options);
-        if (response.status === 401) {
-            alert('로그인이 필요합니다.');
-            location.href = '/login.html';
-            throw new Error('로그인 필요');
-        }
-        const text = await response.text();
-        const data = text ? JSON.parse(text) : null;
-        if (!response.ok) throw new Error(data?.message || `요청 실패 (${response.status})`);
-        return data;
-    }
+    // 내 일정 전체를 받아 검색·페이징은 클라이언트에서 처리한다.
+    const state = { all: [], page: 0, size: loadConsoleSettings().pageSize, editingId: null, busy: false };
 
-    async function createSchedule() {
-        const message = document.getElementById('createMessage');
+    async function loadSchedules() {
+        const error = document.getElementById('errorMessage');
+        error.textContent = '';
         try {
-            const data = await request('/api/trainer/schedules', {
-                method: 'POST', headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    startTime: document.getElementById('startTime').value,
-                    endTime: document.getElementById('endTime').value,
-                    capacity: Number(document.getElementById('capacity').value)
-                })
-            });
-            message.textContent = `일정 생성 성공 (ID: ${data.id})`;
-            await loadSchedules();
-        } catch (e) { message.textContent = e.message; }
+            state.all = await trainerRequest('/api/trainer/schedules');
+            renderSummary();
+            render();
+        } catch (e) {
+            document.getElementById('tableBody').innerHTML =
+                '<tr><td colspan="7" class="empty">일정을 불러오지 못했습니다.</td></tr>';
+            error.textContent = e.message;
+        }
     }
 
-    let creatingTemplate = false;
+    function renderSummary() {
+        const now = Date.now();
+        const open = state.all.filter(schedule => schedule.status === 'OPEN'
+            && new Date(schedule.startTime).getTime() > now);
+        document.getElementById('statTotal').innerHTML = `${state.all.length}<small>건</small>`;
+        document.getElementById('statOpen').innerHTML = `${open.length}<small>건</small>`;
+        document.getElementById('statFull').innerHTML =
+            `${state.all.filter(schedule => schedule.full).length}<small>건</small>`;
+        document.getElementById('statCancelled').innerHTML =
+            `${state.all.filter(schedule => schedule.status === 'CANCELLED').length}<small>건</small>`;
+    }
 
-    async function createTemplate() {
-        if (creatingTemplate) return;
+    function filtered() {
+        const status = document.getElementById('status').value;
+        const period = document.getElementById('period').value;
+        const now = Date.now();
 
-        const message = document.getElementById('templateMessage');
-        const button = document.getElementById('createTemplateButton');
-        const startDate = document.getElementById('effectiveFrom').value;
-        const endDate = document.getElementById('effectiveTo').value;
-        creatingTemplate = true;
+        return state.all
+            .filter(schedule => {
+                if (status && schedule.status !== status) return false;
+                const startedAt = new Date(schedule.startTime).getTime();
+                if (period === 'upcoming' && startedAt <= now) return false;
+                if (period === 'past' && startedAt > now) return false;
+                return true;
+            })
+            .sort((a, b) => b.startTime.localeCompare(a.startTime));
+    }
+
+    function render() {
+        const result = slicePage(filtered(), state.page, state.size);
+        state.page = result.page;
+
+        const now = Date.now();
+        const body = document.getElementById('tableBody');
+        body.innerHTML = result.content.length
+            ? result.content.map(schedule => {
+                const cancelled = schedule.status === 'CANCELLED';
+                const started = new Date(schedule.startTime).getTime() <= now;
+                return `
+                    <tr>
+                        <td class="muted">#${schedule.id}</td>
+                        <td>${formatDateTime(schedule.startTime)}</td>
+                        <td class="muted">${formatDateTime(schedule.endTime)}</td>
+                        <td class="num">${schedule.reservedCount} / ${schedule.capacity}</td>
+                        <td>
+                            ${schedule.full ? '<span class="badge badge-canceled">마감</span>'
+                                : `<span class="muted">잔여 ${schedule.availableCount}명</span>`}
+                            ${renderGauge(schedule.reservedCount, schedule.capacity)}
+                        </td>
+                        <td>${renderBadge(SCHEDULE_STATUS_BADGE, schedule.status)}</td>
+                        <td>
+                            <div class="row-actions">
+                                ${cancelled
+                                    ? `<button class="btn-ghost btn-sm" data-action="restore" data-id="${schedule.id}">복원</button>`
+                                    : `<button class="btn-ghost btn-sm" data-action="edit" data-id="${schedule.id}"
+                                            ${started ? 'disabled title="이미 시작된 수업"' : ''}>수정</button>
+                                       <button class="btn-danger btn-sm" data-action="cancel" data-id="${schedule.id}">취소</button>`}
+                                <button class="btn-ghost btn-sm" data-action="roster" data-id="${schedule.id}">예약자</button>
+                            </div>
+                        </td>
+                    </tr>`;
+            }).join('')
+            : '<tr><td colspan="7" class="empty">조건에 맞는 일정이 없습니다.</td></tr>';
+
+        renderPageFooter(document.getElementById('pagination'), document.getElementById('pageInfo'), result);
+    }
+
+    /* ----- 생성 / 수정 ----- */
+
+    function showFormMessage(text, isError = false) {
+        const message = document.getElementById('formMessage');
+        message.className = `message ${isError ? 'error' : 'success'}`;
+        message.textContent = text;
+    }
+
+    function startEdit(scheduleId) {
+        const schedule = state.all.find(item => item.id === scheduleId);
+        if (!schedule) return;
+        state.editingId = scheduleId;
+        document.getElementById('startTime').value = schedule.startTime.slice(0, 16);
+        document.getElementById('endTime').value = schedule.endTime.slice(0, 16);
+        document.getElementById('capacity').value = schedule.capacity;
+        document.getElementById('formTitle').textContent = `✏️ 수업 #${scheduleId} 수정`;
+        document.getElementById('formDesc').textContent = '수정할 내용을 입력한 뒤 저장하세요.';
+        document.getElementById('submitButton').textContent = '수정 저장';
+        document.getElementById('cancelEditButton').style.display = '';
+        showFormMessage('');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function endEdit() {
+        state.editingId = null;
+        document.getElementById('formTitle').textContent = '🗓️ 수업 일정 생성';
+        document.getElementById('formDesc').textContent = '시작 시각을 고르면 종료 시각이 1시간 뒤로 자동 설정됩니다.';
+        document.getElementById('submitButton').textContent = '일정 생성';
+        document.getElementById('cancelEditButton').style.display = 'none';
+        showFormMessage('');
+    }
+
+    async function submitForm() {
+        if (state.busy) return;
+        const startTime = document.getElementById('startTime').value;
+        const endTime = document.getElementById('endTime').value;
+        const capacity = Number(document.getElementById('capacity').value);
+
+        if (!startTime || !endTime) {
+            showFormMessage('시작·종료 시각을 입력해 주세요.', true);
+            return;
+        }
+        if (startTime >= endTime) {
+            showFormMessage('종료 시각은 시작 시각보다 뒤여야 합니다.', true);
+            return;
+        }
+        if (!capacity || capacity < 1) {
+            showFormMessage('정원은 1명 이상이어야 합니다.', true);
+            return;
+        }
+
+        const button = document.getElementById('submitButton');
+        state.busy = true;
         button.disabled = true;
         try {
-            const data = await request('/api/trainer/schedule-templates', {
-                method: 'POST', headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    dayOfWeek: document.getElementById('dayOfWeek').value,
-                    startTime: document.getElementById('templateStart').value,
-                    endTime: document.getElementById('templateEnd').value,
-                    capacity: Number(document.getElementById('templateCapacity').value),
-                    effectiveFrom: startDate,
-                    effectiveTo: endDate || null
-                })
-            });
-
-            message.textContent = `반복 일정과 실제 수업 등록 성공 (ID: ${data.id})`;
+            const editing = state.editingId !== null;
+            const data = await trainerRequest(
+                editing ? `/api/trainer/schedules/${state.editingId}` : '/api/trainer/schedules',
+                {
+                    method: editing ? 'PUT' : 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ startTime, endTime, capacity })
+                });
+            if (editing) endEdit();
+            showFormMessage(`수업 #${data.id} ${editing ? '수정' : '생성'}이 완료되었습니다.`);
             await loadSchedules();
         } catch (e) {
-            message.textContent = e.message;
+            showFormMessage(e.message, true);
         } finally {
-            creatingTemplate = false;
+            state.busy = false;
             button.disabled = false;
         }
     }
 
-    function localDate(date) {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
+    /* ----- 취소 / 복원 / 정리 ----- */
+
+    async function cancelSchedule(scheduleId) {
+        if (!confirm(`수업 #${scheduleId} 을(를) 취소할까요?`)) return;
+        try {
+            await trainerRequest(`/api/trainer/schedules/${scheduleId}/cancel`, { method: 'PATCH' });
+            await loadSchedules();
+        } catch (e) { alert(e.message); }
     }
 
-    function addDays(value, days) {
-        const date = new Date(`${value}T00:00:00`);
-        date.setDate(date.getDate() + days);
-        return localDate(date);
+    async function restoreSchedule(scheduleId) {
+        try {
+            await trainerRequest(`/api/trainer/schedules/${scheduleId}/restore`, { method: 'PATCH' });
+            await loadSchedules();
+        } catch (e) { alert(e.message); }
     }
 
-    function addOneMonth(value) {
-        const [year, month, day] = value.split('-').map(Number);
-        const targetMonthIndex = month;
-        const targetYear = year + Math.floor(targetMonthIndex / 12);
-        const targetMonth = targetMonthIndex % 12;
-        const lastDay = new Date(targetYear, targetMonth + 1, 0).getDate();
-        return localDate(new Date(targetYear, targetMonth, Math.min(day, lastDay)));
-    }
+    async function cleanupSchedules() {
+        if (state.busy) return;
+        const confirmed = confirm(
+            '취소된 일정을 목록에서 정리합니다.\n'
+            + '예약 이력이 없는 취소 일정은 완전히 삭제되어 이후 복원할 수 없습니다.\n계속하시겠습니까?');
+        if (!confirmed) return;
 
-    function updateEffectiveEndDate() {
-        const startDate = document.getElementById('effectiveFrom').value;
-        if (startDate) {
-            document.getElementById('effectiveTo').value = addOneMonth(startDate);
+        const button = document.getElementById('cleanupButton');
+        state.busy = true;
+        button.disabled = true;
+        button.textContent = '정리 중...';
+        try {
+            const result = await trainerRequest('/api/trainer/schedules/refresh', { method: 'POST' });
+            state.all = result.schedules;
+            renderSummary();
+            render();
+            alert(`삭제 ${result.deletedCount}건 · 보관 ${result.archivedCount}건 정리했습니다.`);
+        } catch (e) {
+            alert(e.message);
+        } finally {
+            state.busy = false;
+            button.disabled = false;
+            button.textContent = '취소 일정 정리';
         }
     }
 
     function setDefaultEndTime() {
         const startInput = document.getElementById('startTime');
-        const endInput = document.getElementById('endTime');
         if (!startInput.value) return;
-
         const end = new Date(startInput.value);
         end.setHours(end.getHours() + 1);
-        const year = end.getFullYear();
-        const month = String(end.getMonth() + 1).padStart(2, '0');
-        const day = String(end.getDate()).padStart(2, '0');
-        const hour = String(end.getHours()).padStart(2, '0');
-        const minute = String(end.getMinutes()).padStart(2, '0');
-        endInput.value = `${year}-${month}-${day}T${hour}:${minute}`;
-    }
-
-    async function loadSchedules() {
-        try {
-            const schedules = await request('/api/trainer/schedules');
-            renderSchedules(schedules);
-        } catch (e) { document.getElementById('scheduleList').textContent = e.message; }
-    }
-
-    function statusLabel(status) {
-        const labels = {OPEN: '예약 가능', CANCELLED: '취소됨', COMPLETED: '수업 완료'};
-        return labels[status] || status;
-    }
-
-    function renderSchedules(schedules) {
-        const list = document.getElementById('scheduleList');
-        list.innerHTML = schedules.length ? '' : '<p>등록한 일정이 없습니다.</p>';
-        schedules.forEach(schedule => {
-            const cancelled = schedule.status === 'CANCELLED';
-            const item = document.createElement('div');
-            item.className = `schedule${cancelled ? ' cancelled' : ''}`;
-            item.innerHTML = `<strong>#${schedule.id} ${schedule.startTime} ~ ${schedule.endTime}</strong>
-                <p>정원 ${schedule.capacity}명 / 예약 ${schedule.reservedCount}명 / 상태 ${statusLabel(schedule.status)}</p>
-                ${cancelled
-                    ? `<button class="primary" onclick="restoreSchedule(${schedule.id})">일정 복원</button>`
-                    : `<button class="danger" onclick="cancelSchedule(${schedule.id})">일정 취소</button>`}`;
-            list.appendChild(item);
-        });
-    }
-
-    async function cancelSchedule(id) {
-        if (!confirm('이 일정을 취소할까요?')) return;
-        try {
-            await request(`/api/trainer/schedules/${id}/cancel`, {method: 'PATCH'});
-            await loadSchedules();
-        } catch (e) { alert(e.message); }
-    }
-
-    async function restoreSchedule(id) {
-        try {
-            await request(`/api/trainer/schedules/${id}/restore`, {method: 'PATCH'});
-            await loadSchedules();
-        } catch (e) { alert(e.message); }
-    }
-
-    let refreshingSchedules = false;
-
-    async function refreshSchedules() {
-        if (refreshingSchedules) return;
-        const confirmed = window.confirm(
-            '새로고침하면 취소된 일정이 목록에서 제거됩니다.\n' +
-            '예약 이력이 없는 취소 일정은 완전히 삭제되어 이후 복원할 수 없습니다.\n' +
-            '계속하시겠습니까?'
-        );
-        if (!confirmed) return;
-
-        const button = document.getElementById('refreshButton');
-        refreshingSchedules = true;
-        button.disabled = true;
-        button.textContent = '정리 중...';
-        try {
-            const result = await request('/api/trainer/schedules/refresh', {method: 'POST'});
-            renderSchedules(result.schedules);
-        } catch (e) {
-            alert(e.message);
-        } finally {
-            refreshingSchedules = false;
-            button.disabled = false;
-            button.textContent = '일정 새로고침';
-        }
+        document.getElementById('endTime').value = toDateTimeInput(end);
     }
 
     document.addEventListener('DOMContentLoaded', () => {
-        if (!getJwtToken()) location.href = '/login.html';
-        renderCurrentUser();
-        document.getElementById('startTime').addEventListener('change', setDefaultEndTime);
-        document.getElementById('effectiveFrom').addEventListener('change', updateEffectiveEndDate);
+        if (!initTrainerPage('schedule')) return;
+
+        // 기본 시작 시각: 내일 오전 10시
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
-        document.getElementById('effectiveFrom').value = localDate(tomorrow);
-        updateEffectiveEndDate();
+        tomorrow.setHours(10, 0, 0, 0);
+        document.getElementById('startTime').value = toDateTimeInput(tomorrow);
+        setDefaultEndTime();
+
+        document.getElementById('startTime').addEventListener('change', setDefaultEndTime);
+        document.getElementById('submitButton').addEventListener('click', submitForm);
+        document.getElementById('cancelEditButton').addEventListener('click', endEdit);
+        document.getElementById('reloadButton').addEventListener('click', loadSchedules);
+        document.getElementById('cleanupButton').addEventListener('click', cleanupSchedules);
+        document.getElementById('status').addEventListener('change', () => { state.page = 0; render(); });
+        document.getElementById('period').addEventListener('change', () => { state.page = 0; render(); });
+
+        document.getElementById('tableBody').addEventListener('click', event => {
+            const button = event.target.closest('button[data-action]');
+            if (!button || button.disabled) return;
+            const scheduleId = Number(button.dataset.id);
+            if (button.dataset.action === 'edit') startEdit(scheduleId);
+            if (button.dataset.action === 'cancel') cancelSchedule(scheduleId);
+            if (button.dataset.action === 'restore') restoreSchedule(scheduleId);
+            if (button.dataset.action === 'roster') {
+                location.href = `/trainer-reservation.html?scheduleId=${scheduleId}`;
+            }
+        });
+        document.getElementById('pagination').addEventListener('click', event => {
+            const button = event.target.closest('button[data-page]');
+            if (button && !button.disabled) {
+                state.page = Number(button.dataset.page);
+                render();
+            }
+        });
+
         loadSchedules();
     });
 </script>

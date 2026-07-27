@@ -36,10 +36,10 @@
             <button id="customerPageBtn" class="nav-btn btn-customer" onclick="navigatePage('/customer.html')">
                 🙋‍♂️ 사용자(회원) 페이지
             </button>
-            <button id="trainerPageBtn" class="nav-btn btn-trainer" onclick="navigatePage('/trainer.html')">
+            <button id="trainerPageBtn" class="nav-btn btn-trainer" onclick="navigatePage('/trainer-dashboard.html')">
                 🏋️ 트레이너 페이지
             </button>
-            <button id="adminPageBtn" class="nav-btn btn-admin" onclick="navigatePage('/admin.html')">
+            <button id="adminPageBtn" class="nav-btn btn-admin" onclick="navigatePage('/admin-dashboard.html')">
                 ⚙️ 관리자 페이지
             </button>
         </div>
@@ -50,30 +50,19 @@
         let userRoles = [];
 
         document.addEventListener("DOMContentLoaded", () => {
-            const token = getJwtToken();
-            if (!token) {
-                alert("로그인이 필요합니다.");
-                window.location.href = "/login.html";
-                return;
-            }
-
-            try {
-                const payload = getJwtPayload();
-                userRoles = payload.roles || payload.auth || [];
-                renderCurrentUser();
-            } catch (e) {
-                console.error("토큰 파싱 실패:", e);
-            }
+            if (!requireAuth()) return;
+            userRoles = getCurrentRoles();
+            renderCurrentUser();
         });
 
         // 페이지 이동 제어 함수
         function navigatePage(url) {
             // 필요에 따라 프론트엔드 차원에서 1차 권한 체크
-            if (url === '/admin.html' && !(userRoles.includes("ROLE_ADMIN") || userRoles.includes("ADMIN"))) {
+            if (url === '/admin-dashboard.html' && !(userRoles.includes("ROLE_ADMIN") || userRoles.includes("ADMIN"))) {
                 alert("❌ 관리자 권한이 없습니다.");
                 return;
             }
-            if (url === '/trainer.html' && !(userRoles.includes("ROLE_TRAINER") || userRoles.includes("TRAINER") || userRoles.includes("ROLE_ADMIN") || userRoles.includes("ADMIN"))) {
+            if (url === '/trainer-dashboard.html' && !(userRoles.includes("ROLE_TRAINER") || userRoles.includes("TRAINER") || userRoles.includes("ROLE_ADMIN") || userRoles.includes("ADMIN"))) {
                 alert("❌ 트레이너 권한이 없습니다.");
                 return;
             }

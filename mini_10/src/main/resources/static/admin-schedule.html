@@ -1,0 +1,197 @@
+﻿<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>관리자 - 수업 스케줄</title>
+    <link rel="stylesheet" href="/assets/css/console.css">
+</head>
+<body>
+<div class="layout">
+    <aside class="sidebar"></aside>
+
+    <main class="main">
+        <div class="page-header">
+            <div>
+                <h1>수업 스케줄 관리</h1>
+                <div class="today"></div>
+            </div>
+            <div class="profile">
+                <div class="avatar">A</div>
+                <div class="profile-text">
+                    <div class="role">관리자</div>
+                    <div class="email"></div>
+                </div>
+                <button class="btn-ghost" onclick="jwtLogout()">로그아웃</button>
+            </div>
+        </div>
+
+        <section class="summary">
+            <div class="card">
+                <div class="label">전체 수업</div>
+                <div class="value" id="statTotal">-<small>건</small></div>
+            </div>
+            <div class="card">
+                <div class="label">진행 예정 <span class="badge badge-paid">OPEN</span></div>
+                <div class="value" id="statOpen">-<small>건</small></div>
+            </div>
+            <div class="card">
+                <div class="label">정원 마감</div>
+                <div class="value" id="statFull">-<small>건</small></div>
+            </div>
+            <div class="card">
+                <div class="label">취소 <span class="badge badge-canceled">CANCELLED</span></div>
+                <div class="value" id="statCancelled">-<small>건</small></div>
+            </div>
+        </section>
+
+        <section class="card toolbar">
+            <input type="text" id="keyword" placeholder="트레이너 이름으로 검색">
+            <select id="status">
+                <option value="">전체 상태</option>
+                <option value="OPEN">오픈 (OPEN)</option>
+                <option value="COMPLETED">완료 (COMPLETED)</option>
+                <option value="CANCELLED">취소 (CANCELLED)</option>
+            </select>
+            <select id="period">
+                <option value="">전체 기간</option>
+                <option value="upcoming">진행 예정만</option>
+                <option value="past">지난 수업만</option>
+            </select>
+            <button class="btn-primary" id="searchButton">검색</button>
+            <button class="btn-ghost" id="refreshButton">새로고침</button>
+        </section>
+
+        <section class="card table-card">
+            <div class="table-scroll">
+                <table>
+                    <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>트레이너</th>
+                        <th>시작</th>
+                        <th>종료</th>
+                        <th class="num">예약/정원</th>
+                        <th class="num">잔여</th>
+                        <th>상태</th>
+                    </tr>
+                    </thead>
+                    <tbody id="tableBody">
+                    <tr><td colspan="7" class="empty">불러오는 중...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="pagination" id="pagination"></div>
+            <div class="page-info" id="pageInfo"></div>
+            <div class="message error" id="errorMessage"></div>
+        </section>
+    </main>
+</div>
+
+<script src="/assets/js/common.js"></script>
+<script src="/assets/js/console.js"></script>
+<script src="/assets/js/admin.js"></script>
+<script>
+    // 전체 목록 API 라서 검색·페이징은 클라이언트에서 처리한다.
+    const state = { all: [], page: 0, size: loadAdminSettings().pageSize };
+
+    async function loadSchedules() {
+        const error = document.getElementById('errorMessage');
+        error.textContent = '';
+        try {
+            state.all = await adminRequest('/api/admin/schedules');
+            renderSummary();
+            state.page = 0;
+            render();
+        } catch (e) {
+            document.getElementById('tableBody').innerHTML =
+                '<tr><td colspan="7" class="empty">수업 목록을 불러오지 못했습니다.</td></tr>';
+            error.textContent = e.message;
+        }
+    }
+
+    function renderSummary() {
+        const now = Date.now();
+        const open = state.all.filter(schedule => schedule.status === 'OPEN'
+            && new Date(schedule.startTime).getTime() > now);
+        document.getElementById('statTotal').innerHTML = `${state.all.length.toLocaleString()}<small>건</small>`;
+        document.getElementById('statOpen').innerHTML = `${open.length.toLocaleString()}<small>건</small>`;
+        document.getElementById('statFull').innerHTML =
+            `${state.all.filter(schedule => schedule.full).length.toLocaleString()}<small>건</small>`;
+        document.getElementById('statCancelled').innerHTML =
+            `${state.all.filter(schedule => schedule.status === 'CANCELLED').length.toLocaleString()}<small>건</small>`;
+    }
+
+    function filtered() {
+        const keyword = document.getElementById('keyword').value.trim().toLowerCase();
+        const status = document.getElementById('status').value;
+        const period = document.getElementById('period').value;
+        const now = Date.now();
+
+        return state.all.filter(schedule => {
+            if (status && schedule.status !== status) return false;
+            if (keyword && !(schedule.trainerName || '').toLowerCase().includes(keyword)) return false;
+            const startedAt = new Date(schedule.startTime).getTime();
+            if (period === 'upcoming' && startedAt <= now) return false;
+            if (period === 'past' && startedAt > now) return false;
+            return true;
+        });
+    }
+
+    function render() {
+        const result = slicePage(filtered(), state.page, state.size);
+        state.page = result.page;
+
+        const body = document.getElementById('tableBody');
+        body.innerHTML = result.content.length
+            ? result.content.map(schedule => `
+                <tr>
+                    <td class="muted">#${schedule.id}</td>
+                    <td>
+                        ${escapeHtml(schedule.trainerName)}
+                        <div class="muted mono">ID ${schedule.trainerId}</div>
+                    </td>
+                    <td>${formatDateTime(schedule.startTime)}</td>
+                    <td class="muted">${formatDateTime(schedule.endTime)}</td>
+                    <td class="num">${schedule.reservedCount} / ${schedule.capacity}</td>
+                    <td class="num">${schedule.full
+                        ? '<span class="badge badge-canceled">마감</span>'
+                        : `${schedule.availableCount}명`}</td>
+                    <td>${renderBadge(SCHEDULE_STATUS_BADGE, schedule.status)}</td>
+                </tr>`).join('')
+            : '<tr><td colspan="7" class="empty">조건에 맞는 수업이 없습니다.</td></tr>';
+
+        renderPagination(document.getElementById('pagination'), result);
+        document.getElementById('pageInfo').textContent = result.totalPages
+            ? `전체 ${result.totalElements.toLocaleString()}건 · ${result.page + 1} / ${result.totalPages} 페이지`
+            : '';
+    }
+
+    function search() {
+        state.page = 0;
+        render();
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        if (!initAdminPage('schedule')) return;
+
+        document.getElementById('searchButton').addEventListener('click', search);
+        document.getElementById('refreshButton').addEventListener('click', loadSchedules);
+        document.getElementById('status').addEventListener('change', search);
+        document.getElementById('period').addEventListener('change', search);
+        document.getElementById('keyword').addEventListener('keydown', event => {
+            if (event.key === 'Enter') search();
+        });
+        document.getElementById('pagination').addEventListener('click', event => {
+            const button = event.target.closest('button[data-page]');
+            if (button && !button.disabled) {
+                state.page = Number(button.dataset.page);
+                render();
+            }
+        });
+
+        loadSchedules();
+    });
+</script>
+</body>
+</html>

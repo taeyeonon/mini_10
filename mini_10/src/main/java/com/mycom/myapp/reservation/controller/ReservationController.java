@@ -44,7 +44,7 @@ public class ReservationController {
     @PatchMapping("/{reservationId}/cancel")
     public ReservationResponse cancel(
             @AuthenticationPrincipal MyUserDetails userDetails,
-            @PathVariable Long reservationId
+            @PathVariable("reservationId") Long reservationId
     ) {
         return reservationService.cancel(userDetails.getId(), reservationId);
     }
